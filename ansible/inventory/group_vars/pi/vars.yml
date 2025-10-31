@@ -74,6 +74,12 @@ ddns_fqdn: "cameras.crookedsentry.net"   # public DNS name (managed via ddclient
 lan_cidr: "192.168.0.0/24"
 vpn_cidr: "10.8.0.0/24"
 
+# Static IP configuration for the Raspberry Pi
+pi_static_ip: "192.168.0.200"
+pi_gateway: "192.168.0.1"
+pi_dns_servers: "75.75.75.75 75.75.76.76"  # Comcast DNS
+pi_connection_name: "Wired connection 1"   # NetworkManager connection name
+
 # --- WireGuard / network plan (canonical names) ---
 wireguard_listen_port: 51820
 wireguard_server_address_cidr: "10.8.0.1/24"    # server interface address

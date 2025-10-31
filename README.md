@@ -16,6 +16,7 @@ GitOps-style home automation infrastructure using Ansible for configuration mana
 ## Quick Start
 
 ### Prerequisites
+
 - Raspberry Pi 4+ with Raspbian/Debian
 - SSH access configured
 - Ansible 2.9+ (installed via `make venv`)
@@ -23,23 +24,27 @@ GitOps-style home automation infrastructure using Ansible for configuration mana
 ### Initial Setup
 
 1. **Install Ansible:**
+
    ```bash
    make venv
    ```
 
 2. **Configure environment:**
+
    ```bash
    cp compose/.env.sample compose/.env
    # Edit compose/.env with your settings
    ```
 
 3. **Initialize Pi and generate keys:**
+
    ```bash
    make init    # Sets up SSH and generates WireGuard keys
    make vault-add-keys  # Adds keys to Ansible vault
    ```
 
 4. **Deploy:**
+
    ```bash
    make simulate  # Dry run
    make deploy    # Deploy to Pi
@@ -47,9 +52,9 @@ GitOps-style home automation infrastructure using Ansible for configuration mana
 
 ## Architecture
 
-```
+```asciidoc
 ┌─────────────────────────────────────────────┐
-│         Raspberry Pi (192.168.x.x)          │
+│    Raspberry Pi (192.168.0.200 - Static)    │
 │                                             │
 │  ┌─────────────────────────────────────┐   │
 │  │ Nginx (Reverse Proxy)                │   │
@@ -70,9 +75,21 @@ GitOps-style home automation infrastructure using Ansible for configuration mana
 └─────────────────────────────────────────────┘
 ```
 
+### Static IP Configuration
+
+The deployment automatically configures a **static IP address (192.168.0.200/24)** on the Raspberry Pi to prevent network connectivity issues from DHCP lease expiration. This ensures:
+
+- ✅ Cameras can always reach the Pi at a known address
+- ✅ No dependency on DHCP server availability
+- ✅ Consistent remote access via SSH and WireGuard
+- ✅ Reliable service availability
+
+Configuration is managed via NetworkManager in `ansible/roles/common/tasks/main.yml`.
+
 ## Network Detection
 
 Nginx classifies clients based on IP address:
+
 - **LAN**: Local network clients (192.168.x.x, 172.16.x.x, etc.)
 - **VPN**: WireGuard clients (10.8.0.x)
 - **Internet**: All other clients (restricted access)

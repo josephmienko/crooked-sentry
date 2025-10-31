@@ -17,8 +17,9 @@ RUN apt-get update && apt-get install -y \
     net-tools curl wget \
     # Development tools
     git vim nano \
-    # Python for Ansible
+    # Python for Ansible and Frigate simulation
     python3 python3-pip python3-venv \
+    python3-pil \
     # Docker prerequisites  
     ca-certificates curl gnupg lsb-release \
     apt-transport-https software-properties-common \
@@ -67,13 +68,20 @@ RUN mkdir -p /opt/crooked-sentry/{config,data} && \
 # Copy simulation configs and scripts
 COPY simulation/configs/ /opt/crooked-sentry/config/
 COPY simulation/scripts/ /usr/local/bin/
+COPY simulation/scripts/frigate-sim.py /tmp/frigate-sim.py
 COPY config/www-info/ /var/www/info/
+
+# Install nginx for web server
+RUN apt-get update && apt-get install -y nginx && \
+    rm -rf /var/lib/apt/lists/* && \
+    cp /opt/crooked-sentry/config/nginx.conf /etc/nginx/sites-available/default
 
 # Supervisor configuration for multi-service simulation
 COPY simulation/supervisor.conf /etc/supervisor/conf.d/crooked-sentry.conf
 
-# Create systemd-like service management script
-RUN chmod +x /usr/local/bin/sim-* || true
+# Create systemd-like service management script and set permissions
+RUN chmod +x /usr/local/bin/sim-* && \
+    mkdir -p /var/log/supervisor
 
 # Expose ports for testing
 EXPOSE 22 80 5000 51820/udp 8554 8555

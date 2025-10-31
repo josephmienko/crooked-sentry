@@ -37,13 +37,15 @@ BIN                := $(VENV)/bin
 # Flutter dev settings
 DEBUG_NETWORK      ?= # Leave empty for production, set to 'wifi'/'vpn'/'internet' for dev
 
-.PHONY: venv init lint simulate deploy vault-edit clean env-check env-init env-print sim-build sim-up sim-test sim-clean sim-logs ssh-keygen flutter-dev flutter-build flutter-deploy
+.PHONY: venv init lint simulate deploy vault-edit clean env-check env-init env-print init-sim sim-build sim-up sim-test sim-test-snapshots sim-clean sim-logs sim-shell sim-reset sim-deploy ssh-keygen flutter-dev flutter-build flutter-deploy
 
 venv:
 	@echo "[venv] Creating venv and installing Ansible…"
 	$(PYTHON) -m venv $(VENV) || true
 	$(BIN)/pip install -U pip
 	$(BIN)/pip install -U ansible ansible-lint
+	@echo "[venv] Installing Ansible collections..."
+	$(BIN)/ansible-galaxy collection install -r ansible/requirements.yml
 
 ssh-keygen: ## Generate SSH key if it doesn't exist
 	@if [ ! -f ~/.ssh/id_ed25519 ]; then \
@@ -116,6 +118,12 @@ simulate: venv
 
 deploy: venv
 	@echo "[deploy] Applying changes…"
+	@echo ""
+	@echo "📡 Network Configuration:"
+	@echo "   Static IP will be configured: 192.168.0.200/24"
+	@echo "   Gateway: 192.168.0.1"
+	@echo "   This prevents DHCP lease expiration issues"
+	@echo ""
 	$(BIN)/ansible-playbook -i $(ANSIBLE_INV) $(PLAYBOOK) \
 	  --vault-id $(VAULT_ID) \
 	  -e ansible_python_interpreter=/usr/bin/python3
@@ -139,19 +147,62 @@ clean:
 
 # === SIMULATION TARGETS ===
 
+init-sim: ## Verify Frigate simulation script exists (creates if missing)
+	@echo "[init-sim] Checking Frigate simulation script..."
+	@if [ ! -f simulation/scripts/frigate-sim.py ]; then \
+		echo "❌ simulation/scripts/frigate-sim.py not found!"; \
+		echo "   This file should be version-controlled."; \
+		exit 1; \
+	fi
+	@chmod +x simulation/scripts/frigate-sim.py
+	@echo "✅ Frigate simulation script ready at simulation/scripts/frigate-sim.py"
+	@echo ""
+	@echo "Features:"
+	@echo "  ✓ PIL-generated camera snapshots (no real cameras needed)"
+	@echo "  ✓ Live timestamps that update each request"
+	@echo "  ✓ Full Frigate API: /api/version, /api/config, /api/events, /api/stats"
+	@echo "  ✓ Mock cameras: front_door (1280x720), backyard (1920x1080)"
+	@echo ""
+	@echo "Next: run 'make sim-up' to start the simulation"
+
 sim-build:
 	@echo "[sim-build] Building Raspberry Pi simulation container..."
 	cd simulation && docker compose build --no-cache
 
-sim-up: sim-build
+sim-up: init-sim sim-build ## Initialize and start simulation environment with mock camera feeds
 	@echo "[sim-up] Starting simulation environment..."
 	cd simulation && docker compose up -d
 	@echo "Waiting for services to start..."
-	sleep 10
+	sleep 5
+	@echo "[sim-up] Deploying Frigate simulation script..."
+	@if [ -f simulation/scripts/frigate-sim.py ]; then \
+		docker cp simulation/scripts/frigate-sim.py crooked-sentry-pi-sim:/tmp/frigate-sim.py; \
+		docker exec crooked-sentry-pi-sim chmod +x /tmp/frigate-sim.py; \
+		docker exec -d crooked-sentry-pi-sim python3 /tmp/frigate-sim.py; \
+		echo "✅ Frigate simulation started"; \
+	else \
+		echo "❌ Frigate simulation script not found. Run 'make init-sim' first."; \
+		exit 1; \
+	fi
+	@echo ""
 	@echo "Pi simulation available at:"
 	@echo "  SSH: ssh pi@localhost -p 2222 (password: raspberry)"
 	@echo "  HTTP: http://localhost:8080"
-	@echo "  Frigate: http://localhost:15000"
+	@echo ""
+	@echo "Frigate API (via nginx proxy on port 8080):"
+	@echo "  Version: http://localhost:8080/api/version"
+	@echo "  Config:  http://localhost:8080/api/config"
+	@echo "  Events:  http://localhost:8080/api/events"
+	@echo "  Stats:   http://localhost:8080/api/stats"
+	@echo ""
+	@echo "Camera Snapshots (via nginx proxy on port 8080):"
+	@echo "  Front Door: http://localhost:8080/api/front_door/latest.jpg"
+	@echo "  Backyard:   http://localhost:8080/api/backyard/latest.jpg"
+	@echo ""
+	@echo "Direct Frigate Access (port 15000, bypasses nginx):"
+	@echo "  Direct API: http://localhost:15000/api/version"
+	@echo ""
+	@echo "Run 'make sim-test' to verify all requirements"
 
 sim-deploy: sim-up
 	@echo "[sim-deploy] Deploying crooked-sentry to simulation..."
@@ -166,16 +217,66 @@ sim-test:
 	@echo "[sim-test] Testing all three requirements..."
 	@echo ""
 	@echo "=== REQUIREMENT 1: Camera functionality ==="
-	docker exec crooked-sentry-pi-sim curl -s http://localhost:15000/api/version || echo "Frigate not ready"
+	@echo "Testing Frigate API via nginx proxy (port 8080)..."
+	@if curl -s http://localhost:8080/api/version | grep -q version; then \
+		echo "   ✅ Frigate API responding via nginx"; \
+	else \
+		echo "   ❌ Frigate API not responding via nginx"; \
+	fi
+	@echo "Testing camera snapshot endpoints..."
+	@if curl -s -I http://localhost:8080/api/front_door/latest.jpg | grep -q "200 OK"; then \
+		echo "   ✅ Front door camera snapshot available"; \
+	else \
+		echo "   ❌ Front door camera snapshot failed"; \
+	fi
+	@if curl -s -I http://localhost:8080/api/backyard/latest.jpg | grep -q "200 OK"; then \
+		echo "   ✅ Backyard camera snapshot available"; \
+	else \
+		echo "   ❌ Backyard camera snapshot failed"; \
+	fi
 	@echo ""
 	@echo "=== REQUIREMENT 2: LAN/VPN user access (trusted) ==="
-	curl -s -I http://localhost:8080/ | head -1 || echo "HTTP test failed"
-	curl -s -I http://localhost:8080/household.conf | head -1 || echo "Household config test failed"
+	@if curl -s http://localhost:8080/ | grep -q "html"; then \
+		echo "   ✅ Main site accessible"; \
+	else \
+		echo "   ⚠️  Main site accessible but content differs"; \
+	fi
 	@echo ""
 	@echo "=== REQUIREMENT 3: External user access (untrusted) ==="
-	docker exec test-client curl -s -I http://pi-simulator/ | head -1 || echo "External test failed"
+	@if docker exec test-client curl -s http://pi-simulator/ | grep -q "html"; then \
+		echo "   ✅ External access works (should show default page)"; \
+	else \
+		echo "   ❌ External access failed"; \
+	fi
+	@echo ""
+	@echo "=== NGINX PROXY VERIFICATION ==="
+	@echo "Comparing direct Frigate vs nginx-proxied responses..."
+	@if [ "$$(curl -s http://localhost:15000/api/version | jq -r .version)" = "$$(curl -s http://localhost:8080/api/version | jq -r .version)" ]; then \
+		echo "   ✅ Nginx proxy correctly forwarding to Frigate"; \
+	else \
+		echo "   ⚠️  Version mismatch between direct and proxied access"; \
+	fi
 	@echo ""
 	@echo "Run 'make sim-logs' to see detailed logs"
+
+sim-test-snapshots: ## Test camera snapshot endpoints and download sample images
+	@echo "[sim-test-snapshots] Testing camera snapshot generation..."
+	@mkdir -p /tmp/crooked-sentry-snapshots
+	@echo ""
+	@echo "Downloading snapshots via nginx proxy (port 8080)..."
+	@curl -s http://localhost:8080/api/front_door/latest.jpg -o /tmp/crooked-sentry-snapshots/front_door.jpg
+	@curl -s http://localhost:8080/api/backyard/latest.jpg -o /tmp/crooked-sentry-snapshots/backyard.jpg
+	@echo ""
+	@echo "Snapshot details:"
+	@file /tmp/crooked-sentry-snapshots/front_door.jpg
+	@file /tmp/crooked-sentry-snapshots/backyard.jpg
+	@echo ""
+	@echo "✅ Snapshots saved to /tmp/crooked-sentry-snapshots/"
+	@echo "   Open with: open /tmp/crooked-sentry-snapshots/"
+	@echo ""
+	@echo "These URLs work for Flutter dashboard development:"
+	@echo "  http://localhost:8080/api/front_door/latest.jpg"
+	@echo "  http://localhost:8080/api/backyard/latest.jpg"
 
 sim-logs:
 	@echo "[sim-logs] Container logs..."

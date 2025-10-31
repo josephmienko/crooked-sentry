@@ -1,0 +1,6 @@
+---
+- name: restart network connection
+  ansible.builtin.command:
+    cmd: nmcli connection up "{{ pi_connection_name }}"
+  when: not ansible_check_mode
+  ignore_errors: true

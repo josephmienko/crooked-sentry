@@ -1,3 +1,15 @@
+- name: Configure static IP address for Raspberry Pi
+  community.general.nmcli:
+    conn_name: "{{ pi_connection_name }}"
+    type: ethernet
+    ip4: "{{ pi_static_ip }}/24"
+    gw4: "{{ pi_gateway }}"
+    dns4: "{{ pi_dns_servers }}"
+    method4: manual
+    state: present
+  register: network_config
+  notify: restart network connection
+
 - name: Pre-clean Docker apt entries to avoid Signed-By conflicts
   become: true
   ansible.builtin.shell: |

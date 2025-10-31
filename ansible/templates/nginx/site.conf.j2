@@ -37,8 +37,19 @@ server {
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 300s;
 
+  # CORS headers for browser access (trusted users only)
+  add_header Access-Control-Allow-Origin * always;
+  add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+  add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With" always;
+  add_header Access-Control-Max-Age 3600 always;
+
   # If trusted → proxy to Frigate; else → info site
   location / {
+    # Handle CORS preflight requests
+    if ($request_method = OPTIONS) {
+      return 204;
+    }
+    
     if ($upstream_or_info = upstream) {
       proxy_pass http://frigate_upstream;
       break;
