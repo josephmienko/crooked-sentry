@@ -2,12 +2,42 @@
 .DS_Store
 
 # Python
-.venv/
+# Python / Ansible
 __pycache__/
-*.pyc
-
-# Ansible
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
 *.retry
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ansible-specific
+*.vault
+
+# Docker
+*.env
+!.env.sample
+
+# Logs
+*.log
+logs/
+
+# Build/Testing
+simulation/.vagrant/
 
 # Local runtime env (do not commit)
 compose/.env

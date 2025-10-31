@@ -1,12 +1,126 @@
-# Crooked Sentry (GitOps + Ansible)
+# Crooked Sentry (Infrastructure)
 
-GitOps-style home NVR using Ansible for configuration, WireGuard for VPN, Frigate for video, and semantic versioning for releases.
+GitOps-style home automation infrastructure using Ansible for configuration management.
 
-## Quick start
-- Fill `compose/.env.sample`, copy to `compose/.env`.
-- Encrypt secrets into `ansible/inventory/group_vars/pi/vault.yml` with Ansible Vault.
-- Run `make simulate` (dry-run), then `make deploy`.
+## What This Repo Contains
 
-## Branching & Releases
-- Work on `main` (or `develop` if you prefer GitFlow tweaks).
-- Tag releases as `vMAJOR.MINOR.PATCH`. A tag triggers CI deploy (see `.github/workflows/deploy.yml`).
+- **Ansible playbooks**: Raspberry Pi configuration and service deployment
+- **Docker Compose**: Frigate NVR, Home Assistant, and supporting services
+- **WireGuard VPN**: Secure remote access configuration
+- **Nginx**: Reverse proxy with network-aware access control (LAN/VPN/Internet)
+
+## Related Repositories
+
+- **Dashboard UI**: [crooked-sentry-dashboard](https://github.com/josephmienko/crooked-sentry-dashboard) - Flutter web app for home automation
+
+## Quick Start
+
+### Prerequisites
+- Raspberry Pi 4+ with Raspbian/Debian
+- SSH access configured
+- Ansible 2.9+ (installed via `make venv`)
+
+### Initial Setup
+
+1. **Install Ansible:**
+   ```bash
+   make venv
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp compose/.env.sample compose/.env
+   # Edit compose/.env with your settings
+   ```
+
+3. **Initialize Pi and generate keys:**
+   ```bash
+   make init    # Sets up SSH and generates WireGuard keys
+   make vault-add-keys  # Adds keys to Ansible vault
+   ```
+
+4. **Deploy:**
+   ```bash
+   make simulate  # Dry run
+   make deploy    # Deploy to Pi
+   ```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│         Raspberry Pi (192.168.x.x)          │
+│                                             │
+│  ┌─────────────────────────────────────┐   │
+│  │ Nginx (Reverse Proxy)                │   │
+│  │ - Port 80/443                        │   │
+│  │ - Serves dashboard (static files)    │   │
+│  │ - Network-based access control       │   │
+│  │ - Proxies /api/* to services         │   │
+│  └─────────────────────────────────────┘   │
+│           │                                 │
+│           ├─ /             → Dashboard      │
+│           ├─ /api/frigate  → Frigate:5000   │
+│           └─ /api/ha       → HA:8123        │
+│                                             │
+│  ┌──────────────┐  ┌──────────────┐        │
+│  │   Frigate    │  │ Home Assist. │        │
+│  │  :5000       │  │  :8123       │        │
+│  └──────────────┘  └──────────────┘        │
+└─────────────────────────────────────────────┘
+```
+
+## Network Detection
+
+Nginx classifies clients based on IP address:
+- **LAN**: Local network clients (192.168.x.x, 172.16.x.x, etc.)
+- **VPN**: WireGuard clients (10.8.0.x)
+- **Internet**: All other clients (restricted access)
+
+Configuration: `ansible/roles/nginx/templates/site.conf.j2`
+
+## Secrets Management
+
+Sensitive data is encrypted with Ansible Vault:
+
+```bash
+# Edit vault
+make vault-edit
+
+# Vault contains:
+# - WireGuard keys
+# - Camera credentials
+# - DDNS tokens
+```
+
+## Testing
+
+Simulation environment for testing before deploying to real hardware:
+
+```bash
+make sim-up       # Build and start simulation
+make sim-deploy   # Test deployment
+make sim-test     # Verify requirements
+make sim-clean    # Clean up
+```
+
+## Maintenance
+
+```bash
+# Deploy specific roles
+make deploy --tags nginx
+make deploy --tags frigate
+
+# Full deployment
+make deploy
+```
+
+## Versioning
+
+- Uses semantic versioning for infrastructure releases
+- Independent from dashboard versioning
+- Tag format: `v1.0.0`
+
+## License
+
+See [LICENSE](LICENSE)
