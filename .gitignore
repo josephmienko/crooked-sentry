@@ -33,4 +33,3 @@ compose/.env
 # Logs/artefacts
 *.log
 tmp/
-*.mp4
