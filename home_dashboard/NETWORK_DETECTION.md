@@ -19,6 +19,7 @@ Configuration: `ansible/roles/nginx/templates/site.conf.j2`
 ### API Endpoint
 
 **GET /whoami** returns JSON:
+
 ```json
 {
   "network": "lan|vpn|internet",
@@ -27,6 +28,7 @@ Configuration: `ansible/roles/nginx/templates/site.conf.j2`
 ```
 
 Also exposes headers:
+
 - `X-Client-Network`: lan | vpn | internet
 - `X-Client-IP`: observed client IP
 
@@ -34,7 +36,7 @@ Also exposes headers:
 
 Follows Flutter's data layer pattern with smart caching and persistence:
 
-```
+```md
 NetworkService (stateless HTTP) → NetworkRepository (cache + persistence) → App State
 ```
 

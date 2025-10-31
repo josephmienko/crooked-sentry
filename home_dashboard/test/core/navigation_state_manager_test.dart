@@ -14,9 +14,9 @@ void main() {
       manager = NavigationStateManager();
     });
 
-    tearDown() {
+    tearDown(() {
       manager.dispose();
-    }
+    });
 
     group('initial state', () {
       test('starts with index 0', () {
