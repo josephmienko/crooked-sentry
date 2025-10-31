@@ -1,0 +1,23 @@
+# /etc/dnsmasq.conf — managed by Ansible
+
+domain-needed
+bogus-priv
+no-resolv
+cache-size=1000
+
+# Upstream resolvers (Cloudflare as example)
+server=1.1.1.1
+server=1.0.0.1
+
+# Bind to specific interfaces
+bind-interfaces
+{% for i in dnsmasq_listen_ifaces | default(['lo', 'eth0'], true) %}
+interface={{ i }}
+{% endfor %}
+
+# Publish cameras FQDN -> Pi LAN IP
+address=/{{ dnsmasq_ddns_fqdn | default('cameras.crooked-sentry.net', true) }}/{{ dnsmasq_pi_lan_ip | default('192.168.0.200', true) }}
+
+# Optional: local domain
+# local=/lan/
+# expand-hosts

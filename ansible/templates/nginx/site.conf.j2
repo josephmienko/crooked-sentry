@@ -1,0 +1,64 @@
+# /etc/nginx/conf.d/default.conf — managed by Ansible
+
+# Classify client IPs: 1 = trusted (LAN/VPN), 0 = everyone else
+geo $is_home {
+  default 0;
+  127.0.0.1/32 1;
+{% for c in nginx_lan_cidrs %}
+  {{ c }} 1;
+{% endfor %}
+{% for c in nginx_wg_cidrs %}
+  {{ c }} 1;
+{% endfor %}
+}
+
+map $is_home $upstream_or_info {
+  1      "upstream";
+  0      "info";
+}
+
+# Upstream points at Frigate container
+upstream frigate_upstream {
+  server frigate:5000;
+  keepalive 32;
+}
+
+server {
+  listen {{ nginx_listen_http_port }} default_server;
+  server_name {{ nginx_cf_record }}.{{ nginx_cf_zone }} _;
+  sendfile on;
+
+  # Basic hardening
+  client_max_body_size 32m;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 300s;
+
+  # If trusted → proxy to Frigate; else → info site
+  location / {
+    if ($upstream_or_info = upstream) {
+      proxy_pass http://frigate_upstream;
+      break;
+    }
+    root {{ nginx_info_root }};
+    index index.html;
+    try_files /index.html =404;
+  }
+
+  # Household WireGuard key for VPN users
+  location /household.conf {
+    if ($upstream_or_info != upstream) {
+      return 404;
+    }
+    alias /var/www/wireguard/household.conf;
+  }
+
+  # Optionally: expose static path always  
+  location /_info/ {
+    alias {{ nginx_info_root }}/;
+    autoindex off;
+  }
+}

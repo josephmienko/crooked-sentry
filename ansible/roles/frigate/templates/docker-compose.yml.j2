@@ -1,0 +1,24 @@
+version: "3.9"
+services:
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+    privileged: true
+    shm_size: "512m"
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - {{ frigate_config_dir }}:/config:rw
+      - {{ frigate_media_dir }}:/media/frigate:rw
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 100000000
+    environment:
+      - TZ={{ tz }}
+    ports:
+      - "{{ frigate_port }}:5000"
+      - "8554:8554"   # RTSP (go2rtc)
+      - "8555:8555/tcp"
+      - "8555:8555/udp"

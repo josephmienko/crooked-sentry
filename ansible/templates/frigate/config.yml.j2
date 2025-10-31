@@ -1,0 +1,65 @@
+# /etc/frigate/config.yml — managed by Ansible
+mqtt:
+  enabled: false
+detectors:
+  cpu1:
+    type: cpu
+
+go2rtc:
+  streams:
+    {{ frigate_cam1_name }}:
+      - "rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_record }}"
+      {% if frigate_cam1_path_detect is defined %}
+      - "rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_detect }}"
+      {% endif %}
+    {{ frigate_cam2_name }}:
+      - "rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_record }}"
+      {% if frigate_cam2_path_detect is defined %}
+      - "rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_detect }}"
+      {% endif %}
+
+ffmpeg:
+  hwaccel_args: preset-rpi-64-h264
+
+cameras:
+  {{ frigate_cam1_name }}:
+    ffmpeg:
+      inputs:
+        - path: rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_detect | default('/Streaming/Channels/102', true) }}
+          roles: [detect]
+        - path: rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_record | default('/Streaming/Channels/101', true) }}
+          roles: [record]
+      input_args:
+        - -rtsp_transport
+        - tcp
+        - -fflags
+        - +genpts+discardcorrupt
+    detect:
+      width: {{ frigate_cam1_detect_width }}
+      height: {{ frigate_cam1_detect_height }}
+      fps: {{ frigate_cam1_detect_fps }}
+
+  {{ frigate_cam2_name }}:
+    ffmpeg:
+      inputs:
+        - path: rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_detect | default('/Streaming/Channels/102', true) }}
+          roles: [detect]
+        - path: rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_record | default('/Streaming/Channels/101', true) }}
+          roles: [record]
+      input_args:
+        - -rtsp_transport
+        - tcp
+        - -fflags
+        - +genpts+discardcorrupt
+    detect:
+      width: {{ frigate_cam2_detect_width }}
+      height: {{ frigate_cam2_detect_height }}
+      fps: {{ frigate_cam2_detect_fps }}
+
+record:
+  enabled: true
+retain:
+  days: 7
+
+database:
+  path: /config/frigate.db

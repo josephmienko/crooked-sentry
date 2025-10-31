@@ -1,0 +1,23 @@
+# FQDN you already publish with ddclient/dnsmasq
+nginx_cf_zone: "{{ lookup('env', 'CF_ZONE') | default('crookedsentry.net', true) }}"
+nginx_cf_record: "{{ lookup('env', 'CF_RECORD') | default('cameras', true) }}"
+nginx_ddns_fqdn: "{{ nginx_cf_record }}.{{ nginx_cf_zone }}"
+
+# CIDRs considered "trusted" (LAN + VPN + Docker)
+nginx_lan_cidrs:
+  - "{{ lookup('env', 'LAN_CIDR') | default('192.168.0.0/24', true) }}"
+  - "172.16.0.0/12"  # Docker bridge networks
+nginx_wg_cidrs:
+  - "{{ lookup('env', 'WG_CIDR') | default('10.8.0.0/24', true) }}"
+
+# Where to serve the info/landing page from (you likely already keep this in Git)
+nginx_info_root: "/var/www/info"
+
+# Frigate upstream (we’ll bind Frigate to 127.0.0.1:5000)
+nginx_frigate_upstream: "http://127.0.0.1:5000"
+
+# Optional: listen ports
+nginx_listen_http_port: 80
+# If you later want TLS, add 443 and cert config.
+
+nginx_conf: "/etc/nginx/conf.d/{{ nginx_cf_record }}.conf"

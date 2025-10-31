@@ -1,0 +1,5 @@
+- name: Restart Frigate
+  become: true
+  ansible.builtin.service:
+    name: frigate-compose
+    state: restarted

@@ -1,0 +1,22 @@
+- name: Ensure ddclient is installed
+  ansible.builtin.package:
+    name: ddclient
+    state: present
+  become: true
+
+- name: Render /etc/ddclient.conf (Cloudflare API token from vault)
+  ansible.builtin.template:
+    src: ddclient.conf.j2
+    dest: /etc/ddclient.conf
+    owner: root
+    group: root
+    mode: '0600'
+  become: true
+  notify: Restart ddclient
+
+- name: Enable and start ddclient
+  ansible.builtin.service:
+    name: ddclient
+    state: started
+    enabled: true
+  become: true

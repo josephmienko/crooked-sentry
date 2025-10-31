@@ -1,0 +1,62 @@
+# /etc/frigate/config.yml — managed by Ansible
+mqtt:
+  enabled: false
+
+detectors:
+  cpu1:
+    type: cpu
+
+go2rtc:
+  streams:
+    {{ frigate_cam1_name }}:
+      - rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_record }}
+      - rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_detect }}
+    {{ frigate_cam2_name }}:
+{% if frigate_cam2_enabled %}
+      - rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_record }}
+      - rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_detect }}
+{% else %}
+      - "ffmpeg:{{ frigate_cam2_name }}#video=h264#hardware=v4l2m2m#input=testsrc"
+{% endif %}
+
+ffmpeg:
+  hwaccel_args: preset-rpi-64-h264
+
+cameras:
+  {{ frigate_cam1_name }}:
+    ffmpeg:
+      input_args: -rtsp_transport tcp -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1
+      inputs:
+        - path: rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_detect }}
+          roles: [detect]
+        - path: rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_record }}
+          roles: [record]
+    detect:
+      width: {{ frigate_cam1_detect_width }}
+      height: {{ frigate_cam1_detect_height }}
+      fps: {{ frigate_cam1_detect_fps }}
+    record:
+      enabled: true
+      retain:
+        days: 7
+        mode: all
+
+{% if frigate_cam2_enabled %}
+  {{ frigate_cam2_name }}:
+    ffmpeg:
+      input_args: -rtsp_transport tcp -fflags +genpts+discardcorrupt -use_wallclock_as_timestamps 1
+      inputs:
+        - path: rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_detect }}
+          roles: [detect]
+        - path: rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_record }}
+          roles: [record]
+    detect:
+      width: {{ frigate_cam2_detect_width }}
+      height: {{ frigate_cam2_detect_height }}
+      fps: {{ frigate_cam2_detect_fps }}
+    record:
+      enabled: true
+      retain:
+        days: 7
+        mode: all
+{% endif %}

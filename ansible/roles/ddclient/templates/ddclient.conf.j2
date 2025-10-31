@@ -1,0 +1,16 @@
+# /etc/ddclient.conf — managed by Ansible
+# Cloudflare (token-based)
+daemon={{ ddclient_daemon }}
+syslog=yes
+ssl=yes
+
+# Discover public IP (any of these are fine — choose one)
+use=web, web=checkip.amazonaws.com/, web-skip='Current IP Address:'
+
+# Cloudflare v2+ (token auth)
+protocol=cloudflare
+server=www.cloudflare.com
+zone={{ nginx_cf_zone }}
+login={{ ddclient_user }}
+password='{{ ddclient_pass }}'
+record={{ nginx_cf_record }}

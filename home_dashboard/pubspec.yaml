@@ -1,0 +1,33 @@
+name: home_dashboard
+description: Crooked Sentry Home Dashboard
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  shared_preferences: ^2.3.3
+  yaml: ^3.1.2
+  url_launcher: ^6.3.0
+  video_player: ^2.7.0
+  go_router: ^13.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - web/icons/CC_logo_light.png
+    - web/icons/CC_logo_dark.png
+    - assets/config/app_config.yaml
+    - web/videos/home.mp4

@@ -1,0 +1,71 @@
+---
+- name: Check if NVMe drive exists
+  ansible.builtin.stat:
+    path: /dev/nvme0n1p1
+  register: nvme_partition
+
+- name: Check if NVMe is already formatted
+  ansible.builtin.command: blkid -o value -s TYPE /dev/nvme0n1p1
+  register: nvme_fstype
+  failed_when: false
+  changed_when: false
+  when: nvme_partition.stat.exists
+  become: true
+
+- name: Format NVMe partition if not already formatted
+  community.general.filesystem:
+    fstype: ext4
+    dev: /dev/nvme0n1p1
+  when:
+    - nvme_partition.stat.exists
+    - nvme_fstype.stdout != "ext4"
+  become: true
+
+- name: Set filesystem label
+  ansible.builtin.command: e2label /dev/nvme0n1p1 frigate-storage
+  when: nvme_partition.stat.exists
+  become: true
+  changed_when: false
+
+- name: Create Frigate mount point
+  ansible.builtin.file:
+    path: /mnt/frigate
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Add NVMe to fstab
+  ansible.posix.mount:
+    path: /mnt/frigate
+    src: LABEL=frigate-storage
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted
+  when: nvme_partition.stat.exists
+  become: true
+
+- name: Set ownership of Frigate storage
+  ansible.builtin.file:
+    path: /mnt/frigate
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: true
+  when: nvme_partition.stat.exists
+
+- name: Read current cmdline.txt
+  ansible.builtin.slurp:
+    src: /boot/firmware/cmdline.txt
+  register: cmdline_contents
+  become: true
+
+- name: Add NVMe power management fix to cmdline.txt
+  ansible.builtin.lineinfile:
+    path: /boot/firmware/cmdline.txt
+    regexp: '^(.*)$'
+    line: '\1 nvme_core.default_ps_max_latency_us=0'
+    backrefs: true
+  become: true
+  when:
+    - nvme_partition.stat.exists
+    - "'nvme_core.default_ps_max_latency_us' not in (cmdline_contents['content'] | b64decode)"

@@ -1,0 +1,59 @@
+#!/bin/bash
+# Simulate systemd service management
+
+SERVICE_NAME="$1"
+ACTION="$2"
+
+case "$ACTION" in
+    "start")
+        echo "Starting $SERVICE_NAME..."
+        case "$SERVICE_NAME" in
+            "docker")
+                dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2376 &
+                ;;
+            "ssh")
+                /usr/sbin/sshd -D &
+                ;;
+            "wireguard" | "wg-quick@wg0")
+                if [ -f /etc/wireguard/wg0.conf ]; then
+                    wg-quick up wg0
+                fi
+                ;;
+            "ddclient")
+                if [ -f /etc/ddclient.conf ]; then
+                    ddclient -daemon -file /etc/ddclient.conf
+                fi
+                ;;
+            "dnsmasq")
+                if [ -f /etc/dnsmasq.conf ]; then
+                    dnsmasq --no-daemon &
+                fi
+                ;;
+        esac
+        ;;
+    "stop")
+        echo "Stopping $SERVICE_NAME..."
+        pkill -f "$SERVICE_NAME" 2>/dev/null || true
+        ;;
+    "restart")
+        $0 "$SERVICE_NAME" stop
+        sleep 2
+        $0 "$SERVICE_NAME" start
+        ;;
+    "enable")
+        echo "Service $SERVICE_NAME enabled (simulation)"
+        ;;
+    "status")
+        if pgrep -f "$SERVICE_NAME" > /dev/null; then
+            echo "$SERVICE_NAME is running"
+            exit 0
+        else
+            echo "$SERVICE_NAME is not running"
+            exit 3
+        fi
+        ;;
+    *)
+        echo "Usage: $0 <service> <start|stop|restart|enable|status>"
+        exit 1
+        ;;
+esac

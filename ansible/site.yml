@@ -1,0 +1,14 @@
+- name: Crooked Sentry deploy
+  hosts: pi
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  roles:
+    - role: common       # (your existing base role)
+    - role: storage      # ← ADD THIS LINE (new role for NVMe setup)
+    - role: ddclient
+    - role: dnsmasq
+    - role: docker       # (if you install docker via role)
+    - role: nginx
+    - role: wireguard
+    - role: frigate

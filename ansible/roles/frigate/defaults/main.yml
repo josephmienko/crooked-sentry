@@ -1,0 +1,31 @@
+frigate_config_dir: "/etc/frigate"
+frigate_media_dir: "/media/frigate"
+
+# Web port
+frigate_port: "{{ lookup('env', 'FRIGATE_PORT') | default('5000', true) }}"
+
+# Camera 1 (role-prefixed defaults)
+frigate_cam1_name: "{{ lookup('env', 'CAM1_NAME') | default('front_door', true) }}"
+frigate_cam1_user: "{{ lookup('env', 'CAM1_USER') | default('admin', true) }}"
+frigate_cam1_pass: "{{ lookup('env', 'CAM1_PASS') | default('', true) }}"
+frigate_cam1_ip: "{{ lookup('env', 'CAM1_IP') | default('192.168.0.210', true) }}"
+frigate_cam1_detect_width: "{{ (lookup('env', 'CAM1_DETECT_WIDTH') | default('704', true)) | int }}"
+frigate_cam1_detect_height: "{{ (lookup('env', 'CAM1_DETECT_HEIGHT') | default('480', true)) | int }}"
+frigate_cam1_detect_fps: "{{ (lookup('env', 'CAM1_DETECT_FPS') | default('8', true)) | int }}"
+# If you don’t have substream, the detect path can reuse main
+frigate_cam1_path_detect: "{{ lookup('env', 'CAM1_PATH_DETECT') | default('/Streaming/Channels/102', true) }}"
+frigate_cam1_path_record: "{{ lookup('env', 'CAM1_PATH_RECORD') | default('/Streaming/Channels/101', true) }}"
+
+# Camera 2 (optional) - role-prefixed
+frigate_cam2_enabled: "{{ lookup('env', 'CAM2_ENABLED') | default('false', true) | bool }}"
+frigate_cam2_name: "{{ lookup('env', 'CAM2_NAME') | default('backyard', true) }}"
+frigate_cam2_user: "{{ lookup('env', 'CAM2_USER') | default('admin', true) }}"
+frigate_cam2_pass: "{{ lookup('env', 'CAM2_PASS') | default('', true) }}"
+frigate_cam2_ip: "{{ lookup('env', 'CAM2_IP') | default('192.168.0.211', true) }}"
+frigate_cam2_detect_width: "{{ (lookup('env', 'CAM2_DETECT_WIDTH') | default('704', true)) | int }}"
+frigate_cam2_detect_height: "{{ (lookup('env', 'CAM2_DETECT_HEIGHT') | default('480', true)) | int }}"
+frigate_cam2_detect_fps: "{{ (lookup('env', 'CAM2_DETECT_FPS') | default('8', true)) | int }}"
+frigate_cam2_path_detect: "{{ lookup('env', 'CAM2_PATH_DETECT') | default('/Streaming/Channels/102', true) }}"
+frigate_cam2_path_record: "{{ lookup('env', 'CAM2_PATH_RECORD') | default('/Streaming/Channels/101', true) }}"
+
+frigate_tz: "{{ lookup('env', 'TZ') | default('America/Los_Angeles', true) }}"

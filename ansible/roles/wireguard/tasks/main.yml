@@ -1,0 +1,381 @@
+---
+- name: Install WireGuard and iptables
+  become: true
+  ansible.builtin.apt:
+    name:
+      - wireguard
+      - wireguard-tools
+      - iptables
+      - qrencode
+    state: present
+    update_cache: true
+
+- name: Enable IPv4 forwarding persistently
+  become: true
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    sysctl_set: true
+    reload: true
+
+- name: Ensure web dir for household onboarding
+  become: true
+  ansible.builtin.file:
+    path: "{{ wireguard_www_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+# --- Server keypair (generate if not provided) ---
+- name: Check if server key file exists and has content
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/server.key
+  register: existing_server_key_stat
+
+- name: Generate server private key if missing and not provided
+  become: true
+  ansible.builtin.command: wg genkey
+  register: _wg_server_priv
+  changed_when: _wg_server_priv.stdout != ""
+  when:
+    - (wireguard_server_private_key | default('') | length) == 0
+    - not existing_server_key_stat.stat.exists or existing_server_key_stat.stat.size == 0
+
+- name: Save generated server private key
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/server.key
+    content: "{{ _wg_server_priv.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - (wireguard_server_private_key | default('') | length) == 0
+    - _wg_server_priv is defined and _wg_server_priv.stdout is defined
+
+- name: Save provided server private key
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/server.key
+    content: "{{ wireguard_server_private_key }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - wireguard_server_private_key is defined and wireguard_server_private_key | length > 0
+    - not existing_server_key_stat.stat.exists or existing_server_key_stat.stat.size == 0
+
+- name: Check if server key file exists and has content
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/server.key
+  register: server_key_stat
+
+- name: Remove invalid server key file if it exists but is empty or invalid
+  become: true
+  ansible.builtin.file:
+    path: /etc/wireguard/server.key
+    state: absent
+  when:
+    - server_key_stat.stat.exists
+    - server_key_stat.stat.size == 0 or server_key_stat.stat.size != 44
+
+- name: Re-check server key file after cleanup
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/server.key
+  register: server_key_stat_clean
+
+- name: Generate server private key after cleanup if needed
+  become: true
+  ansible.builtin.command: wg genkey
+  register: _wg_server_priv_post_cleanup
+  changed_when: _wg_server_priv_post_cleanup.stdout != ""
+  when:
+    - (wireguard_server_private_key | default('') | length) == 0
+    - not server_key_stat_clean.stat.exists
+
+- name: Save generated server private key after cleanup
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/server.key
+    content: "{{ _wg_server_priv_post_cleanup.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - (wireguard_server_private_key | default('') | length) == 0
+    - _wg_server_priv_post_cleanup is defined and _wg_server_priv_post_cleanup.stdout is defined
+
+- name: Final check of server key file after all operations
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/server.key
+  register: server_key_stat_final
+
+- name: Derive server public key from file
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    wg pubkey < /etc/wireguard/server.key
+  register: _wg_server_pub
+  changed_when: false
+  when: server_key_stat_final.stat.exists and server_key_stat_final.stat.size == 44
+  args:
+    executable: /bin/bash
+
+- name: Read server key file if it exists
+  become: true
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server.key
+  register: server_key_content
+  when: server_key_stat_final.stat.exists
+  failed_when: false
+
+- name: Set fact for server keys (final)
+  ansible.builtin.set_fact:
+    wireguard_server_private_key: "{{ (server_key_content.content | b64decode | trim) if server_key_content is not skipped else '' }}"
+    wireguard_server_public_key: "{{ _wg_server_pub.stdout if _wg_server_pub is defined else '' }}"
+
+# --- Household keypair (generate if not provided) ---
+- name: Generate household private key if missing and not provided
+  become: true
+  ansible.builtin.command: wg genkey
+  register: _wg_house_priv
+  changed_when: _wg_house_priv.stdout != ""
+  when: (wireguard_household_private_key | default('') | length) == 0
+  args:
+    creates: /etc/wireguard/household.key
+
+- name: Save generated household private key
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/household.key
+    content: "{{ _wg_house_priv.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - (wireguard_household_private_key | default('') | length) == 0
+    - _wg_house_priv is defined and _wg_house_priv.stdout is defined
+
+- name: Save provided household private key
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/household.key
+    content: "{{ wireguard_household_private_key }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - wireguard_household_private_key is defined
+    - wireguard_household_private_key | length > 0
+
+- name: Check if household key file exists
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/household.key
+  register: household_key_stat
+
+- name: Remove invalid household key file if it exists but is empty or invalid
+  become: true
+  ansible.builtin.file:
+    path: /etc/wireguard/household.key
+    state: absent
+  when:
+    - household_key_stat.stat.exists
+    - household_key_stat.stat.size == 0 or household_key_stat.stat.size != 44
+
+- name: Re-check household key file after cleanup
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/household.key
+  register: household_key_stat_clean
+
+- name: Generate household private key after cleanup if needed
+  become: true
+  ansible.builtin.command: wg genkey
+  register: _wg_house_priv_post_cleanup
+  changed_when: _wg_house_priv_post_cleanup.stdout != ""
+  when:
+    - (wireguard_household_private_key | default('') | length) == 0
+    - not household_key_stat_clean.stat.exists
+
+- name: Save generated household private key after cleanup
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/wireguard/household.key
+    content: "{{ _wg_house_priv_post_cleanup.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - (wireguard_household_private_key | default('') | length) == 0
+    - _wg_house_priv_post_cleanup is defined and _wg_house_priv_post_cleanup.stdout is defined
+
+- name: Final check of household key file after all operations
+  become: true
+  ansible.builtin.stat:
+    path: /etc/wireguard/household.key
+  register: household_key_stat_final
+
+- name: Read household private key from file
+  ansible.builtin.slurp:
+    src: /etc/wireguard/household.key
+  register: _household_key_raw
+  when: household_key_stat_final.stat.exists and household_key_stat_final.stat.size > 0
+
+- name: Derive household public key from file
+  ansible.builtin.command: wg pubkey
+  args:
+    stdin: "{{ _household_key_raw.content | b64decode | trim }}"
+  register: _wg_house_pub
+  changed_when: false
+  when: household_key_stat_final.stat.exists and household_key_stat_final.stat.size > 0
+
+- name: Read household key file if it exists
+  become: true
+  ansible.builtin.slurp:
+    src: /etc/wireguard/household.key
+  register: household_key_content
+  when: household_key_stat_final.stat.exists
+  failed_when: false
+
+- name: Set fact for household keys (final)
+  ansible.builtin.set_fact:
+    wireguard_household_private_key: "{{ (household_key_content.content | b64decode | trim) if household_key_content is not skipped else '' }}"
+    wireguard_household_public_key: "{{ _wg_house_pub.stdout if _wg_house_pub is defined and _wg_house_pub.stdout is defined else '' }}"
+
+- name: Read household private key from file
+  ansible.builtin.slurp:
+    src: /etc/wireguard/household.key
+  register: _household_key_raw
+  when: household_key_stat_final.stat.exists and household_key_stat_final.stat.size > 0
+
+- name: Derive household public key from file
+  become: true
+  when: household_key_stat_final.stat.exists and household_key_stat_final.stat.size > 0
+  ansible.builtin.command: /usr/bin/wg pubkey
+  args:
+    stdin: "{{ _household_key_raw.content | b64decode | trim }}"
+  register: _wg_house_pub
+  changed_when: false
+  no_log: true
+
+- name: Read household key file if it exists
+  become: true
+  ansible.builtin.slurp:
+    src: /etc/wireguard/household.key
+  register: household_key_content
+  when: household_key_stat_final.stat.exists
+  failed_when: false
+
+- name: Set fact for household keys (final)
+  ansible.builtin.set_fact:
+    wireguard_household_private_key: "{{ (household_key_content.content | b64decode | trim) if household_key_content is not skipped else '' }}"
+    wireguard_household_public_key: "{{ _wg_house_pub.stdout if _wg_house_pub is defined and _wg_house_pub.stdout is defined else '' }}"
+
+# --- Render server and client configs ---
+- name: Render /etc/wireguard/wg0.conf
+  become: true
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Render household client config to publish dir
+  become: true
+  ansible.builtin.template:
+    src: household.conf.j2
+    dest: "{{ wireguard_www_dir }}/household.conf"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Render QR code for household client
+  become: true
+  ansible.builtin.shell: >
+    qrencode -t png -o "{{ wireguard_www_dir }}/household.png" < "{{ wireguard_www_dir }}/household.conf"
+  args:
+    creates: "{{ wireguard_www_dir }}/household.png"
+
+# --- Bring WireGuard up ---
+- name: Enable WireGuard service
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ wireguard_unit }}"
+    enabled: true
+
+- name: Restart WireGuard to apply config
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ wireguard_unit }}"
+    state: restarted
+
+# --- Optional: persist generated private keys back into the vault on the control node ---
+- name: Encrypt server private key into vault snippet (control node)
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command: >
+    ansible-vault encrypt_string --vault-id {{ VAULT_ID | default('main@prompt') }}
+    "$(cat /etc/wireguard/server.key)" --name 'wireguard_server_private_key'
+  register: _enc_server
+  changed_when: false
+  when:
+    - wireguard_persist_keys_to_vault | default(false) | bool
+    - (wireguard_server_private_key | default('') | length) == 0
+
+- name: Append encrypted server key block to vault file (control node)
+  delegate_to: localhost
+  become: true
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_vault_file }}"
+    create: true
+    block: "{{ _enc_server.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - wireguard_persist_keys_to_vault | default(false) | bool
+    - _enc_server is defined and _enc_server.stdout != ""
+
+- name: Encrypt household private key into vault snippet (control node)
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command: >
+    ansible-vault encrypt_string
+    --vault-id {{ VAULT_ID | default('main@prompt') }}
+    "$(cat /etc/wireguard/household.key)"
+    --name 'wireguard_household_private_key'
+  register: _enc_house
+  changed_when: false
+  when:
+    - wireguard_persist_keys_to_vault | default(false) | bool
+- name: Append encrypted household key block to vault file (control node)
+  delegate_to: localhost
+  become: true
+  ansible.builtin.blockinfile:
+    path: "{{ ansible_vault_file }}"
+    create: true
+    block: "{{ _enc_house.stdout }}"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - wireguard_persist_keys_to_vault | default(false) | bool
+    - _enc_house is defined and _enc_house.stdout != ""
+    - wireguard_persist_keys_to_vault | default(false) | bool
+    - _enc_house is defined and _enc_house.stdout != ""
+
+- name: Set compatibility aliases for legacy templates
+  ansible.builtin.set_fact:
+    wireguard_server_private: "{{ wireguard_server_private_key | default('') }}"
+    wireguard_server_public: "{{ wireguard_server_public_key | default('') }}"
+    wireguard_household_private: "{{ wireguard_household_private_key | default('') }}"
+    wireguard_household_public: "{{ wireguard_household_public_key | default('') }}"
+    cacheable: true

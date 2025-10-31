@@ -1,0 +1,235 @@
+- name: Remove conflicting containerd / runc packages (if present)
+  become: true
+  ansible.builtin.apt:
+    name:
+      - containerd
+      - containerd.io
+      - runc
+    state: absent
+    purge: true
+    autoremove: true
+  register: _removed_conflicts
+  changed_when: _removed_conflicts.changed
+
+- name: Ensure apt transport & prerequisites are present
+  become: true
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+
+- name: Find docker source files in /etc/apt/sources.list.d
+  become: true
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: 'docker*'
+    file_type: file
+  register: docker_source_files
+
+- name: Remove leftover Docker apt source files (if any)
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ docker_source_files.files }}"
+  when: docker_source_files.matched > 0
+
+- name: Remove docker lines from main sources list
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list
+    regexp: 'download\.docker\.com'
+    state: absent
+    backup: true
+
+- name: Find all .list files in sources.list.d
+  become: true
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: '*.list'
+    file_type: file
+  register: apt_list_files
+
+- name: Remove any docker repository lines from .list files (prevent Signed-By conflicts)
+  become: true
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: 'download\.docker\.com'
+    state: absent
+    backup: true
+  loop: "{{ apt_list_files.files | default([]) }}"
+  when: apt_list_files.matched > 0
+
+- name: Ensure apt keyrings directory exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Set Docker architecture mapping
+  ansible.builtin.set_fact:
+    docker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'armhf' if ansible_architecture in ['armv7l', 'armv6l'] else ansible_architecture }}"
+
+- name: Set Docker distribution (handle Raspberry Pi OS)
+  ansible.builtin.set_fact:
+    docker_distro: "{{ 'debian' if ansible_distribution in ['Raspbian', 'Debian'] else ansible_distribution | lower }}"
+
+- name: Debug system facts for Docker installation
+  ansible.builtin.debug:
+    msg: "Architecture: {{ ansible_architecture }}, \
+      Distribution: {{ ansible_distribution }}, Release: {{ ansible_distribution_release }}, Mapped arch: {{ docker_arch }}, Docker distro: {{ docker_distro }}"
+
+- name: Download Docker GPG to keyring file
+  become: true
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ docker_distro }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: '0644'
+    force: true
+
+- name: Add Docker apt repository (use signed-by keyring)
+  become: true
+  ansible.builtin.apt_repository:
+    filename: docker
+    repo: "deb [arch={{ docker_arch }} signed-by=/etc/apt/keyrings/docker.asc] \
+      https://download.docker.com/linux/{{ docker_distro }} {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Update apt cache (after repo add)
+  become: true
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install Docker Engine (docker-ce) and compose plugin
+  become: true
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  register: docker_install_result
+  failed_when: false
+
+- name: Install Docker via convenience script if apt installation failed
+  become: true
+  when: docker_install_result.failed | default(false)
+  block:
+    - name: Check if docker is already installed
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: docker_bin
+
+    - name: Download Docker convenience script
+      ansible.builtin.get_url:
+        url: https://get.docker.com
+        dest: /tmp/get-docker.sh
+        mode: '0755'
+      when: not docker_bin.stat.exists
+
+    - name: Check if docker is already installed
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: docker_bin
+      become: true
+
+    - name: Check for docker binary (possible locations)
+      ansible.builtin.stat:
+        path: /usr/bin/docker
+      register: docker_bin_usr
+      become: true
+
+    - name: Check for docker binary (alternate location)
+      ansible.builtin.stat:
+        path: /usr/local/bin/docker
+      register: docker_bin_usrlocal
+      become: true
+
+    - name: Run Docker convenience script
+      ansible.builtin.command: /bin/sh /tmp/get-docker.sh
+      args:
+        creates: /usr/bin/docker
+      register: docker_script_result
+      become: true
+      when:
+        - docker_install_result.failed | default(false)
+        - not docker_bin.stat.exists
+
+    - name: Remove Docker convenience script
+      ansible.builtin.file:
+        path: /tmp/get-docker.sh
+        state: absent
+      when: not docker_bin.stat.exists
+
+- name: Ensure docker service enabled/started
+  become: true
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+
+# ensure pip exists (idempotent)
+- name: Ensure python3-pip is present
+  become: true
+  ansible.builtin.apt:
+    name: python3-pip
+    state: present
+    update_cache: true
+
+- name: Install Docker SDK for Python (try system package first)
+  become: true
+  ansible.builtin.apt:
+    name: python3-docker
+    state: present
+    update_cache: true
+  register: apt_docker_install
+  failed_when: false
+
+- name: Install Docker SDK for Python via pip (if system package unavailable)
+  become: true
+  ansible.builtin.pip:
+    name: "docker>=5.0.0"
+    executable: /usr/bin/pip3
+    state: present
+    extra_args: "--break-system-packages --no-cache-dir"
+  register: pip_docker_install
+  when: apt_docker_install.failed | default(false)
+
+- name: Verify Docker SDK import on target with /usr/bin/python3
+  become: true
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - import docker,sys; print('OK', docker.__version__)
+  register: docker_sdk_check
+  failed_when: docker_sdk_check.rc != 0
+  changed_when: false
+
+- name: Debug show pip3 package info (only if import failed)
+  become: true
+  ansible.builtin.command: /usr/bin/pip3 show docker
+  register: pip3_show
+  failed_when: false
+  changed_when: false
+  when: docker_sdk_check is failed
+
+# Start Docker Compose services (files already placed by common role)
+- name: Start Docker Compose services
+  become: true
+  ansible.builtin.command:
+    cmd: docker compose --env-file compose.env up -d
+    chdir: "/home/{{ ansible_user }}"
+  register: compose_up_result
+  changed_when: "'Creating' in compose_up_result.stdout or 'Starting' in compose_up_result.stdout or 'Recreating' in compose_up_result.stdout"

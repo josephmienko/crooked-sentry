@@ -1,0 +1,4 @@
+# Map your Frigate FQDN to the Pi. By default this uses the Pi's primary LAN IP.
+# If your clients use the Pi as DNS over WireGuard, they'll still resolve here
+# and can route to the LAN address over the tunnel.
+address=/{{ nginx_ddns_fqdn }}/{{ ansible_default_ipv4.address | default('192.168.0.200') }}

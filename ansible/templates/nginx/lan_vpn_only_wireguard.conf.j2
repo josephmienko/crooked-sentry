@@ -1,0 +1,11 @@
+# Managed by Ansible
+location {{ wireguard_www_uri }} {
+    allow {{ lan_cidr }};
+    allow {{ vpn_cidr }};
+    deny  all;
+
+    root {{ wireguard_www_dir }};
+    index index.html;
+    autoindex on;
+    add_header Cache-Control "no-store";
+}

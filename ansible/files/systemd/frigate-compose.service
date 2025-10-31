@@ -1,0 +1,15 @@
+[Unit]
+Description=Frigate via docker compose
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+EnvironmentFile=/home/%i/compose.env
+WorkingDirectory=/home/%i
+ExecStart=/usr/bin/docker compose --env-file /home/%i/compose.env -f /home/%i/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose --env-file /home/%i/compose.env -f /home/%i/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target

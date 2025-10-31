@@ -1,0 +1,116 @@
+- name: Pre-clean Docker apt entries to avoid Signed-By conflicts
+  become: true
+  ansible.builtin.shell: |
+    # remove any docker.list files
+    rm -f /etc/apt/sources.list.d/docker* || true
+    # remove docker entries from main sources list
+    if [ -f /etc/apt/sources.list ]; then
+      sed -i.bak -e '/download.docker.com/d' /etc/apt/sources.list || true
+    fi
+    # remove docker entries from any .list files under /etc/apt/sources.list.d
+    for f in /etc/apt/sources.list.d/*.list; do
+      [ -f "$f" ] && sed -i.bak -e '/download.docker.com/d' "$f" || true
+    done
+  changed_when: false
+
+- name: Ensure Frigate dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ frigate_config_dir }}"
+    - "{{ frigate_media_dir }}"
+
+- name: Template Frigate config
+  ansible.builtin.template:
+    src: "frigate/config.yml.j2"
+    dest: "{{ frigate_config_dir }}/config.yml"
+    mode: '0644'
+
+- name: Ensure compose .env exists with TZ
+  ansible.builtin.copy:
+    dest: /home/{{ ansible_user }}/compose.env
+    mode: '0644'
+    content: |
+      TZ={{ timezone }}
+      APP_FQDN={{ app_fqdn }}
+
+- name: Place docker-compose.yml
+  ansible.builtin.copy:
+    src: "../../../compose/docker-compose.yml"
+    dest: "/home/{{ ansible_user }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Ensure nginx config dir
+  ansible.builtin.file:
+    path: "/etc/nginx/conf.d"
+    state: directory
+    mode: '0755'
+
+- name: Template nginx site
+  ansible.builtin.template:
+    src: "nginx/site.conf.j2"
+    dest: "/etc/nginx/conf.d/default.conf"
+    mode: '0644'
+
+- name: Ensure info page dir
+  ansible.builtin.file:
+    path: "/var/www/info"
+    state: directory
+    mode: '0755'
+
+- name: Deploy info page
+  ansible.builtin.copy:
+    src: "../../../config/www-info/index.html"
+    dest: "/var/www/info/index.html"
+    mode: '0644'
+
+- name: Install ddclient
+  ansible.builtin.apt:
+    name: ddclient
+    state: present
+    update_cache: true
+
+- name: Template ddclient.conf
+  ansible.builtin.template:
+    src: "ddclient/ddclient.conf.j2"
+    dest: "/etc/ddclient.conf"
+    mode: '0600'
+
+- name: Enable & restart ddclient
+  ansible.builtin.systemd:
+    name: ddclient
+    enabled: true
+    state: restarted
+
+- name: Install dnsmasq
+  ansible.builtin.apt:
+    name: dnsmasq
+    state: present
+    update_cache: true
+  when: enable_dnsmasq | default(false) | bool
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+  when: enable_dnsmasq | default(false) | bool
+
+- name: Template dnsmasq.conf
+  ansible.builtin.template:
+    src: "dnsmasq/dnsmasq.conf.j2"
+    dest: "/etc/dnsmasq.conf"
+    mode: '0644'
+  when: enable_dnsmasq | default(false) | bool
+
+- name: Enable & restart dnsmasq (only if service unit exists and not in check mode)
+  ansible.builtin.systemd:
+    name: dnsmasq
+    enabled: true
+    state: restarted
+  when:
+    - enable_dnsmasq | default(false) | bool
+    - not ansible_check_mode | default(false)
+    - ansible_facts.services is defined
+    - >
+      ('dnsmasq' in ansible_facts.services) or
+      ('dnsmasq.service' in ansible_facts.services)

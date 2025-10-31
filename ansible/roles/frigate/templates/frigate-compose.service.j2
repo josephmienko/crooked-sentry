@@ -1,0 +1,14 @@
+[Unit]
+Description=Frigate via docker compose
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/etc/frigate
+ExecStart=/usr/bin/docker compose -f /etc/frigate/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f /etc/frigate/docker-compose.yml down
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

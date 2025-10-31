@@ -1,0 +1,7 @@
+nginx_cf_zone: "{{ lookup('env', 'CF_ZONE') | default('crookedsentry.net', true) }}"
+nginx_cf_record: "{{ lookup('env', 'CF_RECORD') | default('cameras', true) }}"
+nginx_ddns_fqdn: "{{ nginx_cf_record }}.{{ nginx_cf_zone }}"
+# Backwards-compatible alias
+ddns_fqdn: "{{ nginx_ddns_fqdn }}"
+# daemon interval (seconds)
+ddclient_daemon: 300

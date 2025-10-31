@@ -1,0 +1,10 @@
+daemon=300
+ssl=yes
+use=web, web=checkip.cloudflare.com
+protocol=cloudflare
+server=www.cloudflare.com
+zone={{ nginx_cf_zone }}
+ttl=1
+login=token
+password='{{ ddclient_pass }}'
+record={{ nginx_ddns_fqdn }}

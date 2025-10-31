@@ -1,0 +1,22 @@
+# Basic interface settings
+wireguard_if: "{{ lookup('env', 'WG_IF') | default('wg0', true) }}"
+wireguard_listen_port: "{{ lookup('env', 'WG_PORT') | default('51820', true) }}"
+wireguard_network: "{{ lookup('env', 'WG_NET') | default('10.8.0.0/24', true) }}"
+wireguard_server_address_cidr: "{{ lookup('env', 'WG_SERVER_ADDR') | default('10.8.0.1/24', true) }}"
+wireguard_household_address_cidr: "{{ lookup('env', 'WG_CLIENT_ADDR') | default('10.8.0.2/32', true) }}"
+wireguard_dns: "{{ lookup('env', 'WG_DNS') | default('1.1.1.1', true) }}"
+wireguard_out_interface: "{{ ansible_default_ipv4.interface | default('eth0') }}"
+
+# Endpoint configuration
+wireguard_endpoint_host: "{{ lookup('env', 'NGINX_DDNS_FQDN') | default('cameras.crookedsentry.net', true) }}"
+wireguard_endpoint_port: "{{ wireguard_listen_port }}"
+
+# Web directory for publishing client configs
+wireguard_www_dir: "{{ lookup('env', 'WG_WWW_DIR') | default('/var/www/wireguard', true) }}"
+
+# Systemd unit name
+wireguard_unit: "wg-quick@{{ wireguard_if }}"
+
+# Backwards compatibility
+wireguard_port: "{{ wireguard_listen_port }}"
+wireguard_server_addr: "{{ wireguard_server_address_cidr }}"

@@ -1,0 +1,11 @@
+# Managed by Ansible — read-only; rendered to {{ wireguard_www_dir }}/household.conf
+[Interface]
+PrivateKey = {{ wireguard_household_private_key }}
+Address = {{ wireguard_household_address_cidr }}
+DNS = {{ wireguard_dns }}
+
+[Peer]
+PublicKey = {{ wireguard_server_public_key }}
+Endpoint = {{ ddns_fqdn }}:{{ wireguard_listen_port }}
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25

@@ -1,0 +1,125 @@
+# Crooked Sentry App Configuration
+# All customizable values for the home dashboard
+
+# Brand Identity
+brand:
+  name: "Crooked Cottage Sentry"
+  logo_light_path: "web/icons/CC_logo_light.png"
+  logo_dark_path: "web/icons/CC_logo_dark.png"
+  favicon_path: "favicon.png"
+
+# Theme Configuration
+theme:
+  # Primary seed color for Material 3 ColorScheme (hex format)
+  seed_color: "#191d16"
+  # Optional: light mode progress indicator color (defaults to seed_color)
+  light_progress_color: "#191d16"
+  # Optional: dark mode progress indicator color
+  dark_progress_color: "#4CAF50"
+  # Optional: connection status colors
+  connection_colors:
+    wifi: "#00C853"      # green
+    vpn: "#2962FF"       # blue
+    internet: "#FF8F00"  # orange
+
+# Network Detection Settings
+network:
+  # How long to cache network type in memory (seconds)
+  cache_expiry_seconds: 60
+  # How often to poll server for network changes (seconds)
+  polling_interval_seconds: 60
+
+# Footer Configuration
+footer:
+  about:
+    title: "About"
+    text: |
+      Crooked Sentry is a home dashboard that brings together cameras, HVAC, 
+      entertainment, and network awareness into a single, simple interface. 
+      Built with Flutter and the love of GI Joe for his beautiful Laura Marie.
+  links:
+    - label: "Privacy Policy"
+      url: "https://crookedsentry.com/privacy"
+    - label: "Terms of Service"
+      url: "https://crookedsentry.com/terms"
+    - label: "Questions"
+      url: "mailto:bossbiachlfp@gmail.com"
+    - label: "GitHub Repository"
+      url: "https://github.com/josephmienko/crooked-sentry"
+  libraries_ui:
+    - name: "Flutter"
+      url: "https://flutter.dev/"
+    - name: "Dart"
+      url: "https://dart.dev/"
+    - name: "Shared Preferences"
+      url: "https://pub.dev/packages/shared_preferences"
+  libraries_backend:
+    - name: "Frigate"
+      url: "https://frigate.video/"
+    - name: "Home Assistant"
+      url: "https://www.home-assistant.io/"
+    - name: "WireGuard"
+      url: "https://www.wireguard.com/"
+    - name: "NGINX"
+      url: "https://www.nginx.com/"
+    - name: "Raspberry Pi OS"
+      url: "https://www.raspberrypi.com/software/raspberry-pi-os/"
+
+
+# Navigation Structure
+navigation:
+  items:
+    - label: "Home"
+      icon: "home"
+      url: null
+      children: []
+
+    - label: "About"
+      icon: "info"
+      url: null
+      children: []
+
+    - label: "CC-CC-TV"
+      icon: "videocam"
+      url: null
+      children:
+        - label: "Live"
+          url: "/frigate/live"
+          children:
+            - label: "Driveway"
+              url: "/frigate/live/driveway"
+            - label: "Backyard"
+              url: "/frigate/live/backyard"
+
+        - label: "Events"
+          url: "/frigate/events"
+          children: []
+
+        - label: "Recordings"
+          url: "/frigate/recordings"
+          children: []
+
+    - label: "HVAC"
+      icon: "thermostat"
+      url: null
+      children: []
+
+# Icon Mapping
+# Maps string icon names to Material Icons
+# See: https://fonts.google.com/icons?icon.set=Material+Icons
+icon_mapping:
+  home: "home"
+  info: "info"
+  videocam: "videocam"
+  thermostat: "thermostat"
+  security: "security"
+  settings: "settings"
+  dashboard: "dashboard"
+  devices: "devices_other"
+  camera: "videocam"
+  analytics: "analytics"
+  notifications: "notifications"
+  # Connection status icons
+  wifi: "wifi_lock"
+  vpn: "vpn_lock"
+  internet: "public"

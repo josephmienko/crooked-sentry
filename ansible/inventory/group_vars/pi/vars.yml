@@ -1,0 +1,112 @@
+# Non-secret defaults resolved from environment
+# These are safe to commit.
+
+# ddclient / DNS settings (role-prefixed)
+nginx_cf_zone: "crookedsentry.net"
+nginx_cf_record: "cameras"
+
+# who to SSH as
+pi_user: "{{ lookup('env', 'PI_USER') | default('bossbitch', true) }}"
+ansible_user: "{{ pi_user }}"
+
+# timezone
+tz: "{{ lookup('env', 'TZ') | default('America/Los_Angeles', true) }}"
+timezone: "{{ lookup('env', 'TZ') | default('UTC', true) }}"
+app_fqdn: "{{ lookup('env', 'NGINX_DDNS_FQDN') | default(lookup('env', 'APP_FQDN') | default('cameras.crookedsentry.net', true), true) }}"
+
+# Frigate / camera 1 (backwards-compatible defaults from env)
+frigate_cam1_name: "cam1"
+frigate_cam1_ip: "{{ lookup('env', 'CAM1_IP') | default('192.168.0.210', true) }}"
+frigate_cam1_user: "{{ lookup('env', 'CAM1_USER') | default('admin', true) }}"
+frigate_cam1_pass: "{{ lookup('env', 'CAM1_PASS') | default('', true) }}"
+frigate_cam1_path_detect: "{{ lookup('env', 'CAM1_PATH_DETECT') | default('/Streaming/Channels/102', true) }}"
+frigate_cam1_path_record: "{{ lookup('env', 'CAM1_PATH_RECORD') | default('/Streaming/Channels/101', true) }}"
+frigate_cam1_detect_width: "{{ (lookup('env', 'CAM1_DETECT_WIDTH') | default('1280', true)) | int }}"
+frigate_cam1_detect_height: "{{ (lookup('env', 'CAM1_DETECT_HEIGHT') | default('720', true)) | int }}"
+frigate_cam1_detect_fps: "{{ (lookup('env', 'CAM1_DETECT_FPS') | default('12', true)) | int }}"
+
+# Frigate / camera 2
+frigate_cam2_name: "cam2"
+frigate_cam2_ip: "{{ lookup('env', 'CAM2_IP') | default('192.168.0.211', true) }}"
+frigate_cam2_user: "{{ lookup('env', 'CAM2_USER') | default('admin', true) }}"
+frigate_cam2_pass: "{{ lookup('env', 'CAM2_PASS') | default('', true) }}"
+frigate_cam2_path_detect: "{{ lookup('env', 'CAM2_PATH_DETECT') | default('/Streaming/Channels/102', true) }}"
+frigate_cam2_path_record: "{{ lookup('env', 'CAM2_PATH_RECORD') | default('/Streaming/Channels/101', true) }}"
+frigate_cam2_detect_width: "{{ (lookup('env', 'CAM2_DETECT_WIDTH') | default('704', true)) | int }}"
+frigate_cam2_detect_height: "{{ (lookup('env', 'CAM2_DETECT_HEIGHT') | default('396', true)) | int }}"
+frigate_cam2_detect_fps: "{{ (lookup('env', 'CAM2_DETECT_FPS') | default('8', true)) | int }}"
+
+# Backwards-compatible aliases in case templates expect d1/d2
+d1:
+  width: "{{ frigate_cam1_detect_width }}"
+  height: "{{ frigate_cam1_detect_height }}"
+  fps: "{{ frigate_cam1_detect_fps }}"
+
+d2:
+  width: "{{ frigate_cam2_detect_width }}"
+  height: "{{ frigate_cam2_detect_height }}"
+  fps: "{{ frigate_cam2_detect_fps }}"
+
+# peers can be empty initially
+# wg_peers:
+#   - name: phone
+#     address: 10.8.0.2/32
+#     public_key: "ABCDEF..."
+#   - name: laptop
+#     address: 10.8.0.3/32
+#     public_key: "ZYXWV..."
+
+nginx_conf: "/etc/nginx/conf.d/{{ nginx_cf_record }}.conf"
+
+# ddclient defaults (used by ddclient templates)
+ddclient_daemon: 300
+ddclient_user: "token"
+ddclient_pass: "{{ lookup('env', 'CF_API_TOKEN') | default('', true) }}"
+
+# Enable dnsmasq on this host
+enable_dnsmasq: true
+
+# Override nginx info root to match container path
+nginx_info_root: "/usr/share/nginx/html"
+
+# --- Networking ---
+ddns_fqdn: "cameras.crookedsentry.net"   # public DNS name (managed via ddclient)
+lan_cidr: "192.168.0.0/24"
+vpn_cidr: "10.8.0.0/24"
+
+# --- WireGuard / network plan (canonical names) ---
+wireguard_listen_port: 51820
+wireguard_server_address_cidr: "10.8.0.1/24"    # server interface address
+wireguard_household_address_cidr: "10.8.0.2/32" # shared client address
+wireguard_dns: "1.1.1.1"
+
+# Allowed subnets that VPN clients can reach (LAN + any services)
+wireguard_allowed_subnets:
+  - "192.168.0.0/24"
+
+# Where to publish the client config + QR for LAN/VPN users
+wireguard_www_dir: "/var/www/wireguard"
+wireguard_www_uri: "/wireguard"
+
+# Systemd unit to bring WG up
+wireguard_unit: "wg-quick@wg0"
+
+# Nginx snippet path for enabling the onboarding location
+nginx_wireguard_snippet_path: "/etc/nginx/snippets/lan_vpn_only_wireguard.conf"
+
+# Optional: if you want Ansible to attempt to save generated keys back to the vault set to true
+wireguard_persist_keys_to_vault: false
+
+# vault filename used by the persist step (only used when persist_keys_to_vault = true)
+ansible_vault_file: "ansible/inventory/group_vars/pi/vault.yml"
+
+# Backwards-compatible wg_* aliases (kept in inventory to avoid role-level lint violations)
+wg_if: "{{ wireguard_if }}"
+wg_port: "{{ wireguard_port }}"
+wg_network: "{{ wireguard_network }}"
+wg_server_addr_cidr: "{{ wireguard_server_addr }}"
+wg_dns: "{{ wireguard_dns }}"
+wg_endpoint_host: "{{ wireguard_endpoint_host }}"
+wg_server_private: "{{ wireguard_server_private | default('') }}"
+wg_client1: "{{ wireguard_peers[0] if (wireguard_peers | length) >= 1 else {} }}"
+wg_client2: "{{ wireguard_peers[1] if (wireguard_peers | length) >= 2 else {} }}"

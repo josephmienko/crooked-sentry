@@ -1,14 +1,36 @@
-*.tar
-*.tar.*
-*.jar
-*.exe
-*.msi
-*.deb
-*.zip
-*.tgz
-*.log
-*.log.*
-*.sig
+# macOS
+.DS_Store
 
-pkg/
-src/
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Ansible
+*.retry
+
+# Local runtime env (do not commit)
+compose/.env
+
+# Secrets (if you keep any plaintext here locally)
+secrets/*
+!secrets/README.md
+
+# WireGuard keys (never commit)
+**/*.key
+**/*.pub
+**/*.png
+# Never commit plaintext secrets or generated keys
+compose/.env
+**/*.key
+**/*.pub
+**/*.pem
+**/*.crt
+**/*.png
+
+
+
+# Logs/artefacts
+*.log
+tmp/
+*.mp4

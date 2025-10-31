@@ -1,0 +1,11 @@
+# FQDN cameras host (role-prefixed)
+# Prefer environment NGINX_CF_ZONE / NGINX_CF_RECORD, then CF_ZONE/CF_RECORD, then defaults.
+dnsmasq_cf_zone: "{{ lookup('env', 'NGINX_CF_ZONE') | default(lookup('env', 'CF_ZONE') | default('crookedsentry.net', true), true) }}"
+dnsmasq_cf_record: "{{ lookup('env', 'NGINX_CF_RECORD') | default(lookup('env', 'CF_RECORD') | default('cameras', true), true) }}"
+dnsmasq_ddns_fqdn: "{{ dnsmasq_cf_record }}.{{ dnsmasq_cf_zone }}"
+
+# Pi LAN IP to publish for the FQDN (VPN clients will route to LAN via tunnel)
+dnsmasq_pi_lan_ip: "{{ lookup('env', 'PI_LAN_IP') | default('192.168.0.200', true) }}"
+dnsmasq_listen_ifaces:
+  - lo
+  - eth0

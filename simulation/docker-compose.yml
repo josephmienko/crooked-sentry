@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  pi-simulator:
+    build:
+      context: ..
+      dockerfile: simulation/Dockerfile
+    container_name: crooked-sentry-pi-sim
+    hostname: crookedsentry-sim
+    privileged: true  # Needed for Docker-in-Docker and networking
+    networks:
+      - sim-network
+    ports:
+      - "2222:22"      # SSH access
+      - "8080:80"      # HTTP access  
+      - "15000:5000"   # Frigate (avoid macOS port conflict)
+      - "51821:51820/udp"  # WireGuard (avoid conflict)
+    volumes:
+      # Mount Docker socket for DinD
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistent storage
+      - sim-frigate-data:/media/frigate
+      - sim-configs:/opt/crooked-sentry/config
+      # Development mounts
+      - ./ansible:/tmp/ansible:ro
+      - ./compose:/tmp/compose:ro
+    environment:
+      - TZ=America/New_York
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # Simulation flags
+      - SIMULATION=true
+      - PI_MODEL=4B
+    tmpfs:
+      - /tmp
+      - /run
+      - /run/lock
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Test client for simulating external access
+  test-client:
+    image: alpine:latest
+    container_name: test-client
+    networks:
+      sim-network:
+        ipv4_address: 172.20.0.100  # External IP for testing
+    command: |
+      sh -c '
+        apk add --no-cache curl nginx
+        echo "Test client ready"
+        tail -f /dev/null
+      '
+    depends_on:
+      - pi-simulator
+
+networks:
+  sim-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
+
+volumes:
+  sim-frigate-data:
+  sim-configs:

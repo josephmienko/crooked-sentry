@@ -1,0 +1,4 @@
+{
+    "ansible.python.interpreterPath": "/Users/mienko/crooked-sentry/.venv/bin/python",
+    "makefile.configureOnOpen": false
+}
