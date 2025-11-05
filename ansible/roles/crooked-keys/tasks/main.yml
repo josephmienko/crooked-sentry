@@ -1,0 +1,99 @@
+---
+- name: Create CrookedKeys directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - "{{ crooked_keys_config_dir }}"
+    - "{{ crooked_keys_data_dir }}"
+    - "{{ crooked_keys_log_dir }}"
+  notify: restart crooked-keys
+
+- name: Generate CrookedKeys configuration
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: "{{ crooked_keys_config_dir }}/config.yml"
+    mode: '0600'
+    owner: root
+    group: root
+  notify: restart crooked-keys
+
+- name: Copy CrookedKeys service files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ crooked_keys_config_dir }}/{{ item }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - package.json
+    - server.js
+    - Dockerfile
+  notify: restart crooked-keys
+
+- name: Generate CrookedKeys Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ crooked_keys_config_dir }}/docker-compose.yml"
+    mode: '0644'
+    owner: root
+    group: root
+  notify: restart crooked-keys
+
+- name: Generate CrookedKeys systemd service
+  ansible.builtin.template:
+    src: crooked-keys.service.j2
+    dest: /etc/systemd/system/crooked-keys.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart crooked-keys
+
+- name: Create CrookedKeys network in Docker
+  community.docker.docker_network:
+    name: "{{ crooked_keys_docker_network }}"
+    driver: bridge
+    ipam_config:
+      - subnet: "172.20.0.0/24"
+        gateway: "172.20.0.1"
+
+- name: Start and enable CrookedKeys service
+  ansible.builtin.systemd:
+    name: crooked-keys
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Create CrookedKeys log rotation
+  ansible.builtin.template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/crooked-keys
+    mode: '0644'
+
+- name: Create CrookedKeys backup script
+  ansible.builtin.template:
+    src: backup-crooked-keys.sh.j2
+    dest: /usr/local/bin/backup-crooked-keys.sh
+    mode: '0755'
+
+- name: Schedule CrookedKeys backup cron job
+  ansible.builtin.cron:
+    name: "CrookedKeys backup"
+    minute: "0"
+    hour: "2"
+    job: "/usr/local/bin/backup-crooked-keys.sh"
+    user: root
+  when: crooked_keys_backup_enabled
+
+- name: Verify CrookedKeys API is responding
+  ansible.builtin.uri:
+    url: "http://localhost:{{ crooked_keys_port }}/api/crooked-keys/health"
+    method: GET
+    timeout: 10
+  retries: 5
+  delay: 10
+  register: crooked_keys_health_check
+  until: crooked_keys_health_check.status == 200

@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  crooked-keys:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crooked-keys
+    restart: unless-stopped
+    
+    ports:
+      - "0.0.0.0:{{ crooked_keys_port }}:3001"
+    
+    volumes:
+      - {{ crooked_keys_data_dir }}:/opt/crooked-keys/data:rw
+      - {{ crooked_keys_log_dir }}:/var/log/crooked-keys:rw
+      - /etc/wireguard:/etc/wireguard:ro
+    
+    environment:
+      - NODE_ENV=production
+      - WG_SERVER_IP={{ ansible_default_ipv4.address }}
+      - WG_PORT={{ wireguard_port | default('51820') }}
+      - VPN_NETWORK={{ wireguard_network | default('10.8.0.0/24') }}
+      - PORT=3001
+      - TZ={{ tz | default('UTC') }}
+    
+    networks:
+      - crooked-services
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/crooked-keys/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  crooked-services:
+    name: {{ crooked_keys_docker_network }}
+    external: true

@@ -1,0 +1,39 @@
+# CrookedKeys Service Configuration
+crooked_keys_version: "{{ lookup('env', 'CROOKED_KEYS_VERSION') | default('latest', true) }}"
+crooked_keys_port: "{{ lookup('env', 'CROOKED_KEYS_PORT') | default('3001', true) }}"
+crooked_keys_config_dir: "/opt/crooked-keys/config"
+crooked_keys_data_dir: "/opt/crooked-keys/data"
+crooked_keys_log_dir: "/var/log/crooked-keys"
+
+# API Configuration
+crooked_keys_api_secret: "{{ lookup('env', 'CROOKED_KEYS_SECRET') | default(lookup('password', '/dev/null length=32 chars=ascii_letters,digits'), true) }}"
+crooked_keys_admin_password: "{{ lookup('env', 'CROOKED_KEYS_ADMIN_PASSWORD') | default(lookup('password', '/dev/null length=16 chars=ascii_letters,digits'), true) }}"
+
+# Network Configuration (inherit from existing WireGuard setup)
+crooked_keys_vpn_network: "{{ wireguard_network }}"
+crooked_keys_vpn_server: "{{ wireguard_server_address_cidr }}"
+crooked_keys_endpoint: "{{ nginx_ddns_fqdn }}"
+
+# Security Configuration
+crooked_keys_rate_limit_requests: 10
+crooked_keys_rate_limit_window: 60
+crooked_keys_session_timeout: 3600
+crooked_keys_max_active_keys: 100
+
+# Integration with existing services
+crooked_keys_frigate_enabled: true
+crooked_keys_homeassistant_enabled: true
+crooked_keys_nginx_integration: true
+
+# Backup Configuration
+crooked_keys_backup_enabled: true
+crooked_keys_backup_retention_days: 30
+
+# Monitoring Configuration
+crooked_keys_health_check_enabled: true
+crooked_keys_metrics_enabled: true
+crooked_keys_log_level: "info"
+
+# Docker Configuration
+crooked_keys_docker_image: "ghcr.io/josephmienko/crooked-keys:{{ crooked_keys_version }}"
+crooked_keys_docker_network: "crooked-services"

@@ -1,0 +1,66 @@
+# CrookedKeys Configuration
+# Managed by Ansible - Do not edit manually
+
+server:
+  port: {{ crooked_keys_port }}
+  host: "127.0.0.1"
+  api_secret: "{{ crooked_keys_api_secret }}"
+  admin_password: "{{ crooked_keys_admin_password }}"
+
+logging:
+  level: "{{ crooked_keys_log_level }}"
+  file: "{{ crooked_keys_log_dir }}/crooked-keys.log"
+  max_size: "100MB"
+  max_files: 5
+
+security:
+  rate_limit:
+    requests: {{ crooked_keys_rate_limit_requests }}
+    window: {{ crooked_keys_rate_limit_window }}
+  session:
+    timeout: {{ crooked_keys_session_timeout }}
+    max_active_keys: {{ crooked_keys_max_active_keys }}
+
+vpn:
+  network: "{{ crooked_keys_vpn_network }}"
+  server_address: "{{ crooked_keys_vpn_server }}"
+  endpoint: "{{ crooked_keys_endpoint }}:{{ wireguard_listen_port }}"
+  dns_servers:
+    - "{{ wireguard_dns }}"
+{% if wireguard_dns != "1.1.1.1" %}
+    - "1.1.1.1"
+{% endif %}
+
+integrations:
+  frigate:
+    enabled: {{ crooked_keys_frigate_enabled }}
+    url: "http://127.0.0.1:{{ frigate_port }}"
+  
+  homeassistant:
+    enabled: {{ crooked_keys_homeassistant_enabled }}
+    url: "http://127.0.0.1:8123"
+  
+  nginx:
+    enabled: {{ crooked_keys_nginx_integration }}
+    config_path: "/etc/nginx/conf.d/crooked-keys-integration.conf"
+
+monitoring:
+  health_check: {{ crooked_keys_health_check_enabled }}
+  metrics: {{ crooked_keys_metrics_enabled }}
+
+data:
+  directory: "{{ crooked_keys_data_dir }}"
+  backup:
+    enabled: {{ crooked_keys_backup_enabled }}
+    retention_days: {{ crooked_keys_backup_retention_days }}
+    
+network:
+  lan_cidrs:
+{% for cidr in nginx_lan_cidrs %}
+    - "{{ cidr }}"
+{% endfor %}
+  
+  vpn_cidrs:
+{% for cidr in nginx_wg_cidrs %}
+    - "{{ cidr }}"
+{% endfor %}

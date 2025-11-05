@@ -1,0 +1,13 @@
+# CrookedKeys log rotation configuration
+{{ crooked_keys_log_dir }}/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+    postrotate
+        systemctl reload crooked-keys 2>/dev/null || true
+    endscript
+}

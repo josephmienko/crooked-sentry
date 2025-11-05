@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# CrookedKeys Backup Script
+# Managed by Ansible - backs up CrookedKeys configuration and data
+
+set -euo pipefail
+
+BACKUP_DIR="{{ crooked_keys_data_dir }}/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/crooked-keys-backup-$TIMESTAMP.tar.gz"
+
+# Ensure backup directory exists
+mkdir -p "$BACKUP_DIR"
+
+echo "Creating CrookedKeys backup: $BACKUP_FILE"
+
+# Create backup
+tar -czf "$BACKUP_FILE" \
+  -C / \
+  --exclude='{{ crooked_keys_data_dir }}/backups' \
+  opt/crooked-keys/config \
+  opt/crooked-keys/data \
+  etc/nginx/conf.d/crooked-keys-integration.conf \
+  etc/systemd/system/crooked-keys.service \
+  var/log/crooked-keys 2>/dev/null || true
+
+# Set proper permissions
+chmod 600 "$BACKUP_FILE"
+
+echo "Backup created successfully: $BACKUP_FILE"
+
+# Clean old backups (keep last {{ crooked_keys_backup_retention_days }} days)
+find "$BACKUP_DIR" -name "crooked-keys-backup-*.tar.gz" -mtime +{{ crooked_keys_backup_retention_days }} -delete 2>/dev/null || true
+
+echo "Old backups cleaned up (retention: {{ crooked_keys_backup_retention_days }} days)"
