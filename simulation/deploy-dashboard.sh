@@ -5,17 +5,17 @@ echo "=== DEPLOYING FLUTTER DASHBOARD TO SIMULATION ==="
 
 # Build Flutter for web
 echo "Building Flutter dashboard..."
-cd /Users/mienko/crooked-sentry/home_dashboard
+cd /Users/mienko/crooked-services/home_dashboard
 make flutter-build
 
 # Copy built files to simulation
 echo "Copying Flutter build to simulation..."
-docker exec crooked-sentry-pi-sim mkdir -p /var/www/dashboard
-docker cp build/web/. crooked-sentry-pi-sim:/var/www/dashboard/
+docker exec crooked-services-pi-sim mkdir -p /var/www/dashboard
+docker cp build/web/. crooked-services-pi-sim:/var/www/dashboard/
 
 # Update nginx config to serve dashboard
 echo "Configuring nginx for dashboard..."
-docker exec crooked-sentry-pi-sim bash -c 'cat > /etc/nginx/sites-available/default << EOF
+docker exec crooked-services-pi-sim bash -c 'cat > /etc/nginx/sites-available/default << EOF
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -63,7 +63,7 @@ server {
 EOF'
 
 # Reload nginx
-docker exec crooked-sentry-pi-sim nginx -s reload
+docker exec crooked-services-pi-sim nginx -s reload
 
 echo ""
 echo "✅ Flutter dashboard deployed!"

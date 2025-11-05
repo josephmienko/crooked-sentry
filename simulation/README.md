@@ -1,7 +1,7 @@
 # Crooked Sentry Simulation Environment
 
 This directory contains Docker-based simulation of the Raspberry Pi environment
-for testing the complete crooked-sentry architecture locally.
+for testing the complete crooked-services architecture locally.
 
 ## Purpose
 
@@ -14,14 +14,14 @@ The simulation serves two critical functions:
 
 2. **Mock Resources for Dashboard Development**: Provide mock resources (Frigate API, camera feeds, 
    network endpoints) that can be used for testing the Flutter dashboard maintained in the 
-   [crooked-sentry-dashboard](https://github.com/josephmienko/crooked-sentry-dashboard) repository.
+   [crooked-services-dashboard](https://github.com/josephmienko/crooked-services-dashboard) repository.
    This enables frontend development without requiring the physical Raspberry Pi or real cameras.
 
 ## Architecture
 
 - **Base Image**: ARM64 Raspberry Pi OS (Debian-based)
 - **Emulation**: Docker BuildKit with ARM64 emulation 
-- **Services**: All crooked-sentry services running in simulated Pi container
+- **Services**: All crooked-services services running in simulated Pi container
 - **Testing**: Full end-to-end verification without physical hardware
 - **Mock Cameras**: PIL-generated camera feeds (no real cameras required)
 
@@ -40,7 +40,7 @@ The simulation serves two critical functions:
                            │ Port 8080
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Docker Container: crooked-sentry-pi-sim                    │
+│  Docker Container: crooked-services-pi-sim                    │
 │                                                             │
 │  ┌────────────────────────────────────────────────────┐    │
 │  │ nginx (Port 80)                                     │    │
@@ -103,6 +103,26 @@ make sim-shell
 make sim-clean
 ```
 
+### Running without Docker (quick local dev)
+
+If Docker Desktop is unavailable or returns a 500 error, you can run the Frigate simulation directly on your Mac:
+
+```bash
+# Start the server on port 5500 (auto-installs Pillow if missing)
+./simulation/run-local.sh
+
+# In another terminal, test endpoints directly
+curl http://localhost:5500/api/version
+curl http://localhost:5500/api/events | jq 'length'   # should print 20
+curl -o front.jpg  http://localhost:5500/api/front_door/latest.jpg
+curl -o thumb.jpg   http://localhost:5500/api/events/evt_002/thumbnail.jpg
+```
+
+Notes:
+- macOS AirPlay may use port 5000; the local runner defaults to port 5500 to avoid conflicts.
+- CORS headers are enabled in the simulation server, so you can point your Flutter app at `http://localhost:5500` during local dev.
+
+
 ## Frigate Mock Camera Feeds
 
 The simulation includes a Python-based Frigate mock server (`scripts/frigate-sim.py`) that:
@@ -147,7 +167,74 @@ Configure your dashboard to use `http://localhost:8080` as the base URL. The ngi
 - ✅ Docker CE ARM64 installation
 - ✅ nginx reverse proxy with geo-routing
 - ✅ Frigate camera system (with PIL-generated mock feeds)
+- ✅ Home Assistant API (with Roku media player integration)
 - ✅ WireGuard VPN server
 - ✅ ddclient DNS updates  
 - ✅ dnsmasq local DNS
 - ✅ Complete networking stack
+
+## Home Assistant Integration
+
+The simulation includes a Home Assistant API server that provides smart home control capabilities. Currently includes:
+
+### Roku Media Player
+
+- **Entity ID**: `media_player.roku`
+- **Capabilities**: 
+  - Turn on/off
+  - Play/pause/stop media
+  - Volume control (set, up, down, mute)
+  - Source selection (Netflix, Hulu, Disney+, YouTube, etc.)
+  - Media navigation (next/previous track)
+
+### Running Home Assistant Locally
+
+```bash
+# Start the Home Assistant server on port 8123
+./simulation/run-homeassistant.sh
+
+# In another terminal, test endpoints
+curl http://localhost:8123/api/
+curl http://localhost:8123/api/config
+curl http://localhost:8123/api/states/media_player.roku
+
+# Control the Roku
+curl -X POST http://localhost:8123/api/services/media_player/select_source \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id": "media_player.roku", "source": "Netflix"}'
+
+curl -X POST http://localhost:8123/api/services/media_player/media_play \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id": "media_player.roku"}'
+```
+
+### Via nginx proxy (in Docker)
+
+When running the full simulation via Docker, Home Assistant is accessible through nginx:
+
+```bash
+# Access via proxy on port 8080
+curl http://localhost:8080/homeassistant/api/
+curl http://localhost:8080/homeassistant/api/states/media_player.roku
+```
+
+### Adding More Entities
+
+To add more entities (lights, sensors, switches, etc.):
+
+1. Create state JSON files in `simulation/data/homeassistant/`
+2. Update `homeassistant-sim.py` to load them at startup
+3. Add corresponding service handlers in the `handle_service_call` method
+
+Example state file structure:
+```json
+{
+  "entity_id": "light.living_room",
+  "state": "on",
+  "attributes": {
+    "friendly_name": "Living Room Light",
+    "brightness": 255,
+    "supported_features": 1
+  }
+}
+```

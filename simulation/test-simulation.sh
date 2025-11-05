@@ -1,12 +1,12 @@
 #!/bin/bash
 # Comprehensive test script for simulation environment
 
-echo "=== CROOKED-SENTRY SIMULATION TEST ==="
+echo "=== CROOKED-SERVICES SIMULATION TEST ==="
 echo ""
 
 # Test Pi simulation connectivity
 echo "🔌 Testing Pi simulation connectivity..."
-if docker exec crooked-sentry-pi-sim echo "Pi simulation online" 2>/dev/null; then
+if docker exec crooked-services-pi-sim echo "Pi simulation online" 2>/dev/null; then
     echo "✅ Pi simulation container is running"
 else
     echo "❌ Pi simulation container not found or not running"
@@ -16,7 +16,7 @@ fi
 # Test Docker-in-Docker  
 echo ""
 echo "🐳 Testing Docker-in-Docker..."
-if docker exec crooked-sentry-pi-sim docker --version 2>/dev/null; then
+if docker exec crooked-services-pi-sim docker --version 2>/dev/null; then
     echo "✅ Docker available inside simulation"
 else
     echo "❌ Docker not available inside simulation"
@@ -27,7 +27,7 @@ echo ""
 echo "🔧 Testing services inside Pi simulation..."
 services=("sshd" "dockerd")
 for service in "${services[@]}"; do
-    if docker exec crooked-sentry-pi-sim pgrep -f "$service" > /dev/null 2>&1; then
+    if docker exec crooked-services-pi-sim pgrep -f "$service" > /dev/null 2>&1; then
         echo "✅ $service is running"
     else
         echo "⚠️  $service may not be running"
@@ -86,6 +86,6 @@ echo "   - HTTP access: http://localhost:8080"
 echo "   - Frigate: http://localhost:5000"
 echo ""
 echo "Next steps:"
-echo "   1. Run 'make sim-deploy' to deploy crooked-sentry"
+echo "   1. Run 'make sim-deploy' to deploy crooked-services"
 echo "   2. Run 'make sim-test' to test all requirements"
 echo "   3. Use 'make sim-shell' to access the Pi simulation"

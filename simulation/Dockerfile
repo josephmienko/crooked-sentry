@@ -60,38 +60,40 @@ RUN ARCH=$(uname -m) && \
     chmod +x /usr/local/bin/docker-compose
 
 # Create directory structure like real Pi deployment
-RUN mkdir -p /opt/crooked-sentry/{config,data} && \
+RUN mkdir -p /opt/crooked-services/{config,data} && \
     mkdir -p /etc/frigate /media/frigate && \
     mkdir -p /var/www/{info,wireguard} && \
-    chown -R pi:pi /opt/crooked-sentry
+    chown -R pi:pi /opt/crooked-services
 
 # Copy simulation configs and scripts
-COPY simulation/configs/ /opt/crooked-sentry/config/
+COPY simulation/configs/ /opt/crooked-services/config/
 COPY simulation/scripts/ /usr/local/bin/
 COPY simulation/scripts/frigate-sim.py /tmp/frigate-sim.py
+COPY simulation/scripts/homeassistant-sim.py /tmp/homeassistant-sim.py
+COPY simulation/data/ /opt/crooked-services/data/
 COPY config/www-info/ /var/www/info/
 
 # Install nginx for web server
 RUN apt-get update && apt-get install -y nginx && \
     rm -rf /var/lib/apt/lists/* && \
-    cp /opt/crooked-sentry/config/nginx.conf /etc/nginx/sites-available/default
+    cp /opt/crooked-services/config/nginx.conf /etc/nginx/sites-available/default
 
 # Supervisor configuration for multi-service simulation
-COPY simulation/supervisor.conf /etc/supervisor/conf.d/crooked-sentry.conf
+COPY simulation/supervisor.conf /etc/supervisor/conf.d/crooked-services.conf
 
 # Create systemd-like service management script and set permissions
 RUN chmod +x /usr/local/bin/sim-* && \
     mkdir -p /var/log/supervisor
 
 # Expose ports for testing
-EXPOSE 22 80 5000 51820/udp 8554 8555
+EXPOSE 22 80 5000 8123 51820/udp 8554 8555
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost/ || exit 1
 
 # Initialize simulation environment
-WORKDIR /opt/crooked-sentry
+WORKDIR /opt/crooked-services
 
 # Start supervisor to manage services (must run as root)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf", "-n"]

@@ -1,10 +1,8 @@
 services:
-  pi-simulator:
-    build:
-      context: ..
-      dockerfile: simulation/Dockerfile
-    container_name: crooked-sentry-pi-sim
-    hostname: crookedsentry-sim
+  pi-sim:
+    build: .
+    container_name: crooked-services-pi-sim
+    hostname: crookedservices-sim
     privileged: true  # Needed for Docker-in-Docker and networking
     networks:
       - sim-network
@@ -18,7 +16,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Persistent storage
       - sim-frigate-data:/media/frigate
-      - sim-configs:/opt/crooked-sentry/config
+      - sim-configs:/opt/crooked-services/config
       # Development mounts
       - ./ansible:/tmp/ansible:ro
       - ./compose:/tmp/compose:ro

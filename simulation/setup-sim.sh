@@ -1,7 +1,7 @@
 #!/bin/bash
 # Simulation setup script
 
-echo "=== CROOKED-SENTRY SIMULATION SETUP ==="
+echo "=== CROOKED-SERVICES SIMULATION SETUP ==="
 
 # 1. Create household.conf (WireGuard config for simulation)
 echo "Creating household.conf..."

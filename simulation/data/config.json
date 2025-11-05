@@ -1,0 +1,23 @@
+{
+  "cameras": {
+    "front_door": {
+      "name": "front_door",
+      "enabled": true,
+      "ffmpeg": {"inputs": [{"path": "rtsp://simulation/front_door"}]},
+      "detect": {"enabled": true, "width": 1280, "height": 720},
+      "record": {"enabled": true},
+      "snapshots": {"enabled": true}
+    },
+    "backyard": {
+      "name": "backyard",
+      "enabled": true,
+      "ffmpeg": {"inputs": [{"path": "rtsp://simulation/backyard"}]},
+      "detect": {"enabled": true, "width": 1920, "height": 1080},
+      "record": {"enabled": true},
+      "snapshots": {"enabled": true}
+    }
+  },
+  "mqtt": {"enabled": false},
+  "detectors": {"cpu": {"type": "cpu"}},
+  "model": {"width": 320, "height": 320}
+}

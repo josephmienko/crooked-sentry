@@ -1,0 +1,28 @@
+{
+  "entity_id": "climate.sensi",
+  "state": "heat_cool",
+  "attributes": {
+    "friendly_name": "Sensi Thermostat",
+    "hvac_modes": ["off", "heat", "cool", "heat_cool"],
+    "min_temp": 7.0,
+    "max_temp": 35.0,
+    "current_temperature": 21.0,
+    "target_temperature": null,
+    "target_temp_low": 20.0,
+    "target_temp_high": 23.0,
+    "temperature_unit": "°C",
+    "hvac_action": "idle",
+    "fan_mode": "auto",
+    "fan_modes": ["auto", "on"],
+    "preset_mode": null,
+    "preset_modes": ["away"],
+    "supported_features": 4015
+  },
+  "last_changed": "2025-11-01T00:00:00Z",
+  "last_updated": "2025-11-01T00:00:00Z",
+  "context": {
+    "id": "01JBRQ8G6XKPWQ9FXHM5V2Y3SENSI",
+    "parent_id": null,
+    "user_id": null
+  }
+}

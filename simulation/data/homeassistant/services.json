@@ -1,0 +1,157 @@
+{
+  "domains": [
+    {
+      "domain": "climate",
+      "services": [
+        {
+          "service": "set_temperature",
+          "description": "Set target temperature or range",
+          "fields": {
+            "entity_id": {"description": "Climate entity id", "example": "climate.sensi"},
+            "temperature": {"description": "Target temperature (single setpoint)", "example": 22.0},
+            "target_temp_low": {"description": "Low temp for heat_cool", "example": 20.0},
+            "target_temp_high": {"description": "High temp for heat_cool", "example": 23.0}
+          }
+        },
+        {
+          "service": "set_hvac_mode",
+          "description": "Set HVAC mode",
+          "fields": {
+            "entity_id": {"description": "Climate entity id", "example": "climate.sensi"},
+            "hvac_mode": {"description": "off/heat/cool/heat_cool", "example": "heat_cool"}
+          }
+        },
+        {
+          "service": "set_fan_mode",
+          "description": "Set fan mode",
+          "fields": {
+            "entity_id": {"description": "Climate entity id", "example": "climate.sensi"},
+            "fan_mode": {"description": "auto/on", "example": "auto"}
+          }
+        },
+        {
+          "service": "set_preset_mode",
+          "description": "Set preset mode",
+          "fields": {
+            "entity_id": {"description": "Climate entity id", "example": "climate.sensi"},
+            "preset_mode": {"description": "Preset name (e.g. away)", "example": "away"}
+          }
+        },
+        {
+          "service": "turn_on",
+          "description": "Turn on climate device",
+          "fields": {"entity_id": {"description": "Climate entity id", "example": "climate.sensi"}}
+        },
+        {
+          "service": "turn_off",
+          "description": "Turn off climate device",
+          "fields": {"entity_id": {"description": "Climate entity id", "example": "climate.sensi"}}
+        }
+      ]
+    },
+    {
+      "domain": "media_player",
+      "services": [
+        {
+          "service": "turn_on",
+          "description": "Turn on the media player",
+          "fields": {}
+        },
+        {
+          "service": "turn_off",
+          "description": "Turn off the media player",
+          "fields": {}
+        },
+        {
+          "service": "toggle",
+          "description": "Toggle the media player on/off",
+          "fields": {}
+        },
+        {
+          "service": "volume_up",
+          "description": "Increase volume",
+          "fields": {}
+        },
+        {
+          "service": "volume_down",
+          "description": "Decrease volume",
+          "fields": {}
+        },
+        {
+          "service": "volume_mute",
+          "description": "Mute or unmute volume",
+          "fields": {
+            "is_volume_muted": {
+              "description": "True/false for mute/unmute",
+              "example": true
+            }
+          }
+        },
+        {
+          "service": "volume_set",
+          "description": "Set the volume level",
+          "fields": {
+            "volume_level": {
+              "description": "Volume level to set (0.0-1.0)",
+              "example": 0.5
+            }
+          }
+        },
+        {
+          "service": "media_play",
+          "description": "Play media",
+          "fields": {}
+        },
+        {
+          "service": "media_pause",
+          "description": "Pause media",
+          "fields": {}
+        },
+        {
+          "service": "media_play_pause",
+          "description": "Toggle play/pause",
+          "fields": {}
+        },
+        {
+          "service": "media_stop",
+          "description": "Stop playing media",
+          "fields": {}
+        },
+        {
+          "service": "media_next_track",
+          "description": "Skip to next track",
+          "fields": {}
+        },
+        {
+          "service": "media_previous_track",
+          "description": "Go to previous track",
+          "fields": {}
+        },
+        {
+          "service": "select_source",
+          "description": "Select input source / app",
+          "fields": {
+            "source": {
+              "description": "Name of the source to select",
+              "example": "Netflix"
+            }
+          }
+        },
+        {
+          "service": "play_media",
+          "description": "Play media from a URL or media identifier",
+          "fields": {
+            "media_content_id": {
+              "description": "The ID of the content to play",
+              "example": "https://example.com/video.mp4"
+            },
+            "media_content_type": {
+              "description": "The type of content (music, video, tvshow, etc.)",
+              "example": "video"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

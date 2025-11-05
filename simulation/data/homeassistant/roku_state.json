@@ -1,0 +1,34 @@
+{
+  "entity_id": "media_player.roku",
+  "state": "idle",
+  "attributes": {
+    "friendly_name": "Living Room Roku",
+    "supported_features": 149436,
+    "volume_level": 0.5,
+    "is_volume_muted": false,
+    "media_content_type": "app",
+    "app_id": "tvinput.hdmi1",
+    "app_name": "Home",
+    "source": "Home",
+    "source_list": [
+      "Home",
+      "Netflix",
+      "Hulu",
+      "Disney+",
+      "YouTube",
+      "Amazon Prime Video",
+      "Plex",
+      "Apple TV+",
+      "HBO Max",
+      "Spotify"
+    ],
+    "device_class": "tv"
+  },
+  "last_changed": "2025-11-01T00:00:00.000000+00:00",
+  "last_updated": "2025-11-01T00:00:00.000000+00:00",
+  "context": {
+    "id": "01JBRQ8G6XKPWQ9FXHM5V2Y3N4",
+    "parent_id": null,
+    "user_id": null
+  }
+}
