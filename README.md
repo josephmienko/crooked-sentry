@@ -1,4 +1,4 @@
-# Crooked Sentry (Infrastructure)
+# Crooked Services (Infrastructure)
 
 GitOps-style home automation infrastructure using Ansible for configuration management.
 
@@ -11,7 +11,7 @@ GitOps-style home automation infrastructure using Ansible for configuration mana
 
 ## Related Repositories
 
-- **Dashboard UI**: [crooked-sentry-dashboard](https://github.com/josephmienko/crooked-sentry-dashboard) - Flutter web app for home automation
+- **Dashboard UI**: [crooked-services-dashboard](https://github.com/josephmienko/crooked-services-dashboard) - Flutter web app for home automation
 
 ## Quick Start
 
@@ -120,6 +120,32 @@ make sim-deploy   # Test deployment
 make sim-test     # Verify requirements
 make sim-clean    # Clean up
 ```
+
+## Health Checks
+
+Verify all services are running correctly:
+
+```bash
+# Run health check against your Pi
+./ops/health_check.sh 192.168.0.200
+
+# Or use default IP from inventory
+./ops/health_check.sh
+
+# With SSH access for systemd service checks
+export PI_SSH_USER=pi
+ssh-copy-id pi@192.168.0.200
+./ops/health_check.sh 192.168.0.200
+```
+
+The script validates:
+
+- ✓ Network connectivity
+- ✓ HTTP endpoints (root, /whoami, Frigate, Home Assistant)
+- ✓ API responses and versions
+- ✓ CORS configuration
+- ✓ System services (via SSH: Docker, WireGuard, ddclient, dnsmasq)
+- ✓ Running containers
 
 ## Maintenance
 

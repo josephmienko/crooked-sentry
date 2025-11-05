@@ -4,7 +4,8 @@ SHELL := /bin/bash
 # --- ENV helpers ---
 ENV_FILE := compose/.env
 ENV_SAMPLE := compose/.env.sample
-REQ_VARS := TZ PI_USER NGINX_DDNS_FQDN NGINX_CF_ZONE NGINX_CF_RECORD WG_PORT WG_NET WG_SERVER_CIDR CAM1_IP CAM1_USER CAM1_PASS
+# Required minimum for deploy; camera auth is optional and configured per environment
+REQ_VARS := TZ PI_USER NGINX_DDNS_FQDN NGINX_CF_ZONE NGINX_CF_RECORD WG_PORT WG_NET WG_SERVER_CIDR CAM1_IP
 
 VAULT_ID ?= main@prompt
 VERBOSITY ?= -vvv
@@ -18,6 +19,27 @@ env-print:
 	  VAL="$${!V}"; \
 	  if [ -z "$$VAL" ]; then printf "  %-20s %s\n" "$$V" "(MISSING)"; else printf "  %-20s %s\n" "$$V" "$$VAL"; fi; \
 	done
+
+# Autofill FQDNs in compose/.env from record + zone (macOS-safe)
+env-autofill: ## Compute APP_FQDN and NGINX_DDNS_FQDN from NGINX_CF_RECORD + NGINX_CF_ZONE
+	@set -e; \
+	[ -f $(ENV_FILE) ] || { echo "$(ENV_FILE) not found. Run 'make env-init' first."; exit 1; }; \
+	rec=$$(awk -F= '/^NGINX_CF_RECORD=/{print $$2}' $(ENV_FILE)); \
+	zone=$$(awk -F= '/^NGINX_CF_ZONE=/{print $$2}' $(ENV_FILE)); \
+	[ -n "$$rec" ] && [ -n "$$zone" ] || { echo "NGINX_CF_RECORD or NGINX_CF_ZONE missing in $(ENV_FILE)"; exit 1; }; \
+	fqdn="$$rec.$$zone"; \
+	if grep -q '^APP_FQDN=' $(ENV_FILE); then \
+		sed -i.bak -E "s|^APP_FQDN=.*|APP_FQDN=$$fqdn|" $(ENV_FILE); \
+	else \
+		echo "APP_FQDN=$$fqdn" >> $(ENV_FILE); \
+	fi; \
+	if grep -q '^NGINX_DDNS_FQDN=' $(ENV_FILE); then \
+		sed -i.bak -E "s|^NGINX_DDNS_FQDN=.*|NGINX_DDNS_FQDN=$$fqdn|" $(ENV_FILE); \
+	else \
+		echo "NGINX_DDNS_FQDN=$$fqdn" >> $(ENV_FILE); \
+	fi; \
+	rm -f $(ENV_FILE).bak; \
+	echo "✅ Updated APP_FQDN and NGINX_DDNS_FQDN → $$fqdn"
 
 # Load compose/.env for all targets if present
 ifneq (,$(wildcard compose/.env))
@@ -40,8 +62,13 @@ DEBUG_NETWORK      ?= # Leave empty for production, set to 'wifi'/'vpn'/'interne
 .PHONY: venv init lint simulate deploy vault-edit clean env-check env-init env-print init-sim sim-build sim-up sim-test sim-test-snapshots sim-clean sim-logs sim-shell sim-reset sim-deploy ssh-keygen flutter-dev flutter-build flutter-deploy
 
 venv:
-	@echo "[venv] Creating venv and installing Ansible…"
-	$(PYTHON) -m venv $(VENV) || true
+	@echo "[venv] Creating venv with Python 3.13 and installing Ansible…"
+	@if command -v python3.13 >/dev/null 2>&1; then \
+		python3.13 -m venv $(VENV); \
+	else \
+		echo "⚠️ Python 3.13 not found, falling back to python3"; \
+		$(PYTHON) -m venv $(VENV); \
+	fi
 	$(BIN)/pip install -U pip
 	$(BIN)/pip install -U ansible ansible-lint
 	@echo "[venv] Installing Ansible collections..."
@@ -50,7 +77,7 @@ venv:
 ssh-keygen: ## Generate SSH key if it doesn't exist
 	@if [ ! -f ~/.ssh/id_ed25519 ]; then \
 		echo "[ssh-keygen] Creating new SSH key..."; \
-		ssh-keygen -t ed25519 -C "ansible@crooked-sentry" -f ~/.ssh/id_ed25519 -N ""; \
+		ssh-keygen -t ed25519 -C "ansible@crooked-services" -f ~/.ssh/id_ed25519 -N ""; \
 	else \
 		echo "[ssh-keygen] SSH key already exists at ~/.ssh/id_ed25519"; \
 	fi
@@ -169,21 +196,11 @@ sim-build:
 	@echo "[sim-build] Building Raspberry Pi simulation container..."
 	cd simulation && docker compose build --no-cache
 
-sim-up: init-sim sim-build ## Initialize and start simulation environment with mock camera feeds
+sim-up: init-sim sim-build ## Initialize and start simulation environment with mock services (managed by supervisor)
 	@echo "[sim-up] Starting simulation environment..."
 	cd simulation && docker compose up -d
 	@echo "Waiting for services to start..."
 	sleep 5
-	@echo "[sim-up] Deploying Frigate simulation script..."
-	@if [ -f simulation/scripts/frigate-sim.py ]; then \
-		docker cp simulation/scripts/frigate-sim.py crooked-sentry-pi-sim:/tmp/frigate-sim.py; \
-		docker exec crooked-sentry-pi-sim chmod +x /tmp/frigate-sim.py; \
-		docker exec -d crooked-sentry-pi-sim python3 /tmp/frigate-sim.py; \
-		echo "✅ Frigate simulation started"; \
-	else \
-		echo "❌ Frigate simulation script not found. Run 'make init-sim' first."; \
-		exit 1; \
-	fi
 	@echo ""
 	@echo "Pi simulation available at:"
 	@echo "  SSH: ssh pi@localhost -p 2222 (password: raspberry)"
@@ -195,6 +212,12 @@ sim-up: init-sim sim-build ## Initialize and start simulation environment with m
 	@echo "  Events:  http://localhost:8080/api/events"
 	@echo "  Stats:   http://localhost:8080/api/stats"
 	@echo ""
+	@echo "Home Assistant sim (via nginx proxy):"
+	@echo "  Root:    http://localhost:8080/homeassistant/api/"
+	@echo ""
+	@echo "Climate sim (Sensi) (via nginx proxy):"
+	@echo "  Sensi:   http://localhost:8080/climate/api/states/climate.sensi"
+	@echo ""
 	@echo "Camera Snapshots (via nginx proxy on port 8080):"
 	@echo "  Front Door: http://localhost:8080/api/front_door/latest.jpg"
 	@echo "  Backyard:   http://localhost:8080/api/backyard/latest.jpg"
@@ -205,7 +228,7 @@ sim-up: init-sim sim-build ## Initialize and start simulation environment with m
 	@echo "Run 'make sim-test' to verify all requirements"
 
 sim-deploy: sim-up
-	@echo "[sim-deploy] Deploying crooked-sentry to simulation..."
+	@echo "[sim-deploy] Deploying crooked-services to simulation..."
 	cp ansible/inventory/hosts.ini ansible/inventory/hosts-sim.ini
 	sed -i.bak 's/ansible_host=.*/ansible_host=localhost ansible_port=2222/' ansible/inventory/hosts-sim.ini
 	$(BIN)/ansible-playbook -i ansible/inventory/hosts-sim.ini $(PLAYBOOK) \
@@ -259,20 +282,26 @@ sim-test:
 	@echo ""
 	@echo "Run 'make sim-logs' to see detailed logs"
 
+sim-verify-apis: ## Verify proxied APIs exposed by sim nginx
+	@echo "[sim-verify-apis] Checking proxied endpoints via http://localhost:8080 ..."
+	@echo "- /api/version (Frigate)" && curl -fsS http://localhost:8080/api/version | jq -r .version || echo "❌"
+	@echo "- /homeassistant/api/ (HA sim)" && curl -fsS http://localhost:8080/homeassistant/api/ | jq -r .message || echo "❌"
+	@echo "- /climate/api/states/climate.sensi (Sensi sim)" && curl -fsS http://localhost:8080/climate/api/states/climate.sensi | jq '{entity_id, state, current: .attributes.current_temperature, target: .attributes.target_temperature, low: .attributes.target_temp_low, high: .attributes.target_temp_high}' || echo "❌"
+
 sim-test-snapshots: ## Test camera snapshot endpoints and download sample images
 	@echo "[sim-test-snapshots] Testing camera snapshot generation..."
-	@mkdir -p /tmp/crooked-sentry-snapshots
+	@mkdir -p /tmp/crooked-services-snapshots
 	@echo ""
 	@echo "Downloading snapshots via nginx proxy (port 8080)..."
-	@curl -s http://localhost:8080/api/front_door/latest.jpg -o /tmp/crooked-sentry-snapshots/front_door.jpg
-	@curl -s http://localhost:8080/api/backyard/latest.jpg -o /tmp/crooked-sentry-snapshots/backyard.jpg
+	@curl -s http://localhost:8080/api/front_door/latest.jpg -o /tmp/crooked-services-snapshots/front_door.jpg
+	@curl -s http://localhost:8080/api/backyard/latest.jpg -o /tmp/crooked-services-snapshots/backyard.jpg
 	@echo ""
 	@echo "Snapshot details:"
-	@file /tmp/crooked-sentry-snapshots/front_door.jpg
-	@file /tmp/crooked-sentry-snapshots/backyard.jpg
+	@file /tmp/crooked-services-snapshots/front_door.jpg
+	@file /tmp/crooked-services-snapshots/backyard.jpg
 	@echo ""
-	@echo "✅ Snapshots saved to /tmp/crooked-sentry-snapshots/"
-	@echo "   Open with: open /tmp/crooked-sentry-snapshots/"
+	@echo "✅ Snapshots saved to /tmp/crooked-services-snapshots/"
+	@echo "   Open with: open /tmp/crooked-services-snapshots/"
 	@echo ""
 	@echo "These URLs work for Flutter dashboard development:"
 	@echo "  http://localhost:8080/api/front_door/latest.jpg"
@@ -284,7 +313,7 @@ sim-logs:
 
 sim-shell:
 	@echo "[sim-shell] Connecting to simulation Pi..."
-	docker exec -it crooked-sentry-pi-sim /bin/bash
+	docker exec -it crooked-services-pi-sim /bin/bash
 
 sim-clean:
 	@echo "[sim-clean] Stopping and removing simulation..."
@@ -313,3 +342,126 @@ flutter-build: ## Build Flutter web app for production (no debug overrides)
 flutter-deploy: flutter-build ## Build and deploy Flutter app to Pi (via Ansible)
 	@echo "[flutter-deploy] Deploying Flutter web app to Pi..."
 	@echo "TODO: Add Ansible task to copy home_dashboard/build/web to Pi nginx root"
+
+# === MONITORING & HEALTH CHECK TARGETS ===
+
+health-check: ## Run comprehensive health check on Pi services
+	@echo "[health-check] Running full system health check..."
+	@./ops/health_check.sh
+
+health-crooked-keys: ## Run enhanced CrookedKeys health check
+	@echo "[health-crooked-keys] Running CrookedKeys integration health check..."
+	@./ops/crooked-keys-health-check.sh
+
+api-test: ## Test all API endpoints and log responses
+	@echo "[api-test] Testing Frigate API endpoints..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	echo "🌐 Testing Frigate API at $$PI_IP..."; \
+	echo "📡 Version API:"; \
+	curl -s "http://$$PI_IP/frigate/api/version" | jq -r '.version // "No version found"'; \
+	echo "📡 Config API:"; \
+	curl -s "http://$$PI_IP/frigate/api/config" | jq -r '.cameras | keys | length' | xargs echo "Cameras configured:"; \
+	echo "📡 Events API:"; \
+	curl -s "http://$$PI_IP/frigate/api/events?limit=1" | jq -r 'if type=="array" then "Events available: " + (length | tostring) else "Events response: " + (type | tostring) end'; \
+	echo "📡 Network Classification:"; \
+	curl -s "http://$$PI_IP/whoami" | jq -r '"\(.network) network from IP \(.ip)"'
+
+network-test: ## Test network access from different perspectives
+	@echo "[network-test] Testing network access controls..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	echo "🔒 Testing Frigate access control..."; \
+	if curl -s "http://$$PI_IP/frigate/" | grep -q "VPN connection"; then \
+		echo "   ✅ Frigate properly blocked (VPN required message)"; \
+	elif curl -s "http://$$PI_IP/frigate/" | grep -q -i "frigate\|html"; then \
+		echo "   ✅ Frigate accessible (trusted network)"; \
+	else \
+		echo "   ❌ Frigate not responding"; \
+	fi; \
+	echo "🔒 Testing Home Assistant access control..."; \
+	if curl -s "http://$$PI_IP/homeassistant/" | grep -q "VPN connection"; then \
+		echo "   ✅ Home Assistant properly blocked (VPN required message)"; \
+	elif curl -s "http://$$PI_IP/homeassistant/" | grep -q -i "assistant\|html"; then \
+		echo "   ✅ Home Assistant accessible (trusted network)"; \
+	else \
+		echo "   ❌ Home Assistant not responding"; \
+	fi
+
+logs: ## Show recent logs from Pi services
+	@echo "[logs] Fetching recent service logs..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	PI_USER=$${PI_USER:-bossbitch}; \
+	echo "📄 Recent nginx access logs:"; \
+	ssh $$PI_USER@$$PI_IP "sudo tail -10 /var/log/nginx/access.log" 2>/dev/null || echo "  Cannot access nginx logs"; \
+	echo "📄 Recent docker container logs:"; \
+	ssh $$PI_USER@$$PI_IP "sudo docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null || echo "  Cannot access docker logs"
+
+storage-status: ## Check Frigate storage usage on SSD
+	@echo "[storage-status] Checking Frigate storage usage..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	PI_USER=$${PI_USER:-bossbitch}; \
+	ssh $$PI_USER@$$PI_IP "df -h /mnt/frigate" 2>/dev/null || echo "  Cannot access storage info"; \
+	echo "📊 Recent recordings:"; \
+	ssh $$PI_USER@$$PI_IP "sudo find /mnt/frigate -name '*.mp4' -mmin -60 | wc -l | xargs echo 'Files recorded in last hour:'" 2>/dev/null || echo "  Cannot check recent recordings"
+
+# === CROOKEDKEYS INTEGRATION TARGETS ===
+
+deploy-crooked-keys: venv ## Deploy CrookedKeys integration (dry-run first)
+	@echo "[deploy-crooked-keys] Deploying CrookedKeys integration..."
+	@./ops/deploy-crooked-keys.sh --dry-run
+	@read -p "Deploy looks good? Continue with actual deployment? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		./ops/deploy-crooked-keys.sh; \
+	else \
+		echo "Deployment cancelled"; \
+	fi
+
+test-integration: ## Test CrookedKeys integration with Docker infrastructure
+	@echo "[test-integration] Testing CrookedKeys integration..."
+	@./ops/test-crooked-keys-integration.sh
+
+update-containers: ## Update and restart Docker containers with new nginx config
+	@echo "[update-containers] Updating Docker containers..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	PI_USER=$${PI_USER:-bossbitch}; \
+	echo "Deploying updated nginx configuration..."; \
+	$(MAKE) deploy; \
+	echo "Restarting Docker containers..."; \
+	ssh $$PI_USER@$$PI_IP "cd /opt/crooked-services && sudo docker-compose down && sudo docker-compose up -d"; \
+	echo "Waiting for containers to start..."; \
+	sleep 10; \
+	echo "Testing integration..."; \
+	./ops/test-crooked-keys-integration.sh
+
+deploy-firewall: ## Deploy enhanced firewall rules for CrookedKeys
+	@echo "[deploy-firewall] Deploying CrookedKeys firewall rules..."
+	@./ops/deploy-crooked-keys.sh --firewall-only
+
+crooked-keys-status: ## Check CrookedKeys service status
+	@echo "[crooked-keys-status] Checking CrookedKeys integration status..."
+	@PI_IP=$${PI_IP:-192.168.0.200}; \
+	echo "🔐 CrookedKeys API Health:"; \
+	curl -s "http://$$PI_IP/api/crooked-keys/health" | jq -r 'if .status then "Status: \(.status), Version: \(.version // "unknown")" else "API not responding" end' 2>/dev/null || echo "  CrookedKeys API not available"; \
+	echo "🔐 Service Status:"; \
+	PI_USER=$${PI_USER:-bossbitch}; \
+	ssh $$PI_USER@$$PI_IP "sudo systemctl is-active crooked-keys" 2>/dev/null | xargs echo "CrookedKeys service:" || echo "  Cannot check service status"
+
+# === COMBINED MONITORING TARGETS ===
+
+status: ## Show comprehensive system status
+	@echo "🏠 Crooked Services Status Dashboard"
+	@echo "=================================="
+	@$(MAKE) -s network-test
+	@echo ""
+	@$(MAKE) -s storage-status
+	@echo ""
+	@$(MAKE) -s crooked-keys-status
+
+monitor: ## Continuous monitoring (press Ctrl+C to stop)
+	@echo "[monitor] Starting continuous monitoring (Ctrl+C to stop)..."
+	@while true; do \
+		clear; \
+		echo "🏠 Crooked Services Monitor - $$(date)"; \
+		echo "=========================================="; \
+		$(MAKE) -s status; \
+		sleep 30; \
+	done
