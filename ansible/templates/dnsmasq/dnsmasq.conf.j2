@@ -16,7 +16,7 @@ interface={{ i }}
 {% endfor %}
 
 # Publish cameras FQDN -> Pi LAN IP
-address=/{{ dnsmasq_ddns_fqdn | default('cameras.crooked-sentry.net', true) }}/{{ dnsmasq_pi_lan_ip | default('192.168.0.200', true) }}
+address=/{{ dnsmasq_ddns_fqdn | default('cameras.crooked-services.net', true) }}/{{ dnsmasq_pi_lan_ip | default('192.168.0.200', true) }}
 
 # Optional: local domain
 # local=/lan/

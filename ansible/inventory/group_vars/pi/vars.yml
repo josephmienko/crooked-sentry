@@ -1,6 +1,14 @@
 # Non-secret defaults resolved from environment
 # These are safe to commit.
 
+# Home location for sun/weather calculations (San Francisco defaults)
+home_latitude: 37.7749
+home_longitude: -122.4194
+
+roku_host: "192.168.0.220"
+roku_enabled: true
+roku_name: "MC at the CC"
+
 # ddclient / DNS settings (role-prefixed)
 nginx_cf_zone: "crookedsentry.net"
 nginx_cf_record: "cameras"
@@ -25,9 +33,10 @@ frigate_cam1_detect_width: "{{ (lookup('env', 'CAM1_DETECT_WIDTH') | default('12
 frigate_cam1_detect_height: "{{ (lookup('env', 'CAM1_DETECT_HEIGHT') | default('720', true)) | int }}"
 frigate_cam1_detect_fps: "{{ (lookup('env', 'CAM1_DETECT_FPS') | default('12', true)) | int }}"
 
-# Frigate / camera 2
-frigate_cam2_name: "cam2"
-frigate_cam2_ip: "{{ lookup('env', 'CAM2_IP') | default('192.168.0.211', true) }}"
+# Frigate / camera 2 (backyard)
+frigate_cam2_enabled: true
+frigate_cam2_name: "backyard"
+frigate_cam2_ip: "192.168.0.211"
 frigate_cam2_user: "{{ lookup('env', 'CAM2_USER') | default('admin', true) }}"
 frigate_cam2_pass: "{{ lookup('env', 'CAM2_PASS') | default('', true) }}"
 frigate_cam2_path_detect: "{{ lookup('env', 'CAM2_PATH_DETECT') | default('/Streaming/Channels/102', true) }}"
@@ -57,6 +66,8 @@ d2:
 #     public_key: "ZYXWV..."
 
 nginx_conf: "/etc/nginx/conf.d/{{ nginx_cf_record }}.conf"
+
+
 
 # ddclient defaults (used by ddclient templates)
 ddclient_daemon: 300

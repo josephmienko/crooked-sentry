@@ -11,12 +11,10 @@ go2rtc:
     {{ frigate_cam1_name }}:
       - rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_record }}
       - rtsp://{{ frigate_cam1_user }}:{{ frigate_cam1_pass }}@{{ frigate_cam1_ip }}:554{{ frigate_cam1_path_detect }}
-    {{ frigate_cam2_name }}:
 {% if frigate_cam2_enabled %}
+    {{ frigate_cam2_name }}:
       - rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_record }}
       - rtsp://{{ frigate_cam2_user }}:{{ frigate_cam2_pass }}@{{ frigate_cam2_ip }}:554{{ frigate_cam2_path_detect }}
-{% else %}
-      - "ffmpeg:{{ frigate_cam2_name }}#video=h264#hardware=v4l2m2m#input=testsrc"
 {% endif %}
 
 ffmpeg:

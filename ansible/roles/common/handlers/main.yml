@@ -4,3 +4,26 @@
     cmd: nmcli connection up "{{ pi_connection_name }}"
   when: not ansible_check_mode
   ignore_errors: true
+
+- name: restart reverse proxy
+  listen: restart reverse proxy
+  ansible.builtin.command:
+    cmd: docker compose restart nginx
+    chdir: /home/{{ ansible_user }}
+  when: ansible_connection != 'local'
+  become: true
+
+- name: restart frigate
+  listen: restart frigate
+  ansible.builtin.command:
+    cmd: docker compose restart frigate
+    chdir: /home/{{ ansible_user }}
+  when: ansible_connection != 'local'
+  become: true
+
+- name: restart reverse proxy
+  ansible.builtin.command:
+    cmd: docker compose restart nginx
+    chdir: /home/{{ ansible_user }}
+  when: ansible_connection != 'local'
+  become: true

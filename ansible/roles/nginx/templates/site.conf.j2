@@ -1,19 +1,23 @@
 # /etc/nginx/conf.d/site.conf — managed by Ansible
 
+# Rate limiting for CrookedKeys
+limit_req_zone $binary_remote_addr zone=vpn_onboarding:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=crooked_keys_api:10m rate=10r/m;
+
 # Network classification
 # - $is_lan: 1 if client is in LAN CIDRs
 # - $is_vpn: 1 if client is in WireGuard CIDRs
 # - $is_home: 1 if either LAN or VPN (back-compat for existing routing)
 geo $is_lan {
   default 0;
-{% for c in lan_cidrs %}
+{% for c in nginx_lan_cidrs %}
   {{ c }} 1;
 {% endfor %}
 }
 
 geo $is_vpn {
   default 0;
-{% for c in wg_cidrs %}
+{% for c in nginx_wg_cidrs %}
   {{ c }} 1;
 {% endfor %}
 }
@@ -37,12 +41,12 @@ map $is_home $upstream_or_info {
 
 # Upstream points at Frigate on localhost
 upstream frigate_upstream {
-  server {{ frigate_upstream | regex_replace('^http://','') }};
+  server {{ nginx_frigate_upstream | regex_replace('^http://','') }};
   keepalive 32;
 }
 
 server {
-  listen {{ listen_http_port }} default_server;
+  listen {{ nginx_listen_http_port }} default_server;
   server_name {{ nginx_ddns_fqdn }} _;
   sendfile on;
 
@@ -65,7 +69,7 @@ server {
       proxy_pass http://frigate_upstream;
       break;
     }
-    root {{ info_root }};
+    root {{ nginx_info_root }};
     index index.html;
     try_files /index.html =404;
   }
@@ -78,7 +82,7 @@ server {
 
   # Optionally: expose static path always
   location /_info/ {
-    alias {{ info_root }}/;
+    alias {{ nginx_info_root }}/;
     autoindex off;
   }
 
@@ -90,5 +94,65 @@ server {
     alias {{ wireguard_www_dir }}/;
     autoindex on;
     add_header Cache-Control "no-store";
+  }
+
+  # Home Assistant proxy (LAN/VPN only)
+  location /homeassistant/ {
+    if ($is_home = 0) {
+      return 403;
+    }
+    proxy_pass http://127.0.0.1:8123/;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    # CORS for local dev and dashboard UI
+    set $cors "";
+    if ($http_origin ~* "^https?://(localhost(:[0-9]+)?|127\.0\.0\.1(:[0-9]+)?|0\.0\.0\.0(:[0-9]+)?|crooked-services-dashboard|crooked-services\.local)") {
+      set $cors "true";
+    }
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+
+    # Handle preflight requests
+    if ($request_method = OPTIONS) {
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 86400;
+      return 204;
+    }
+  }
+
+  # CrookedKeys VPN onboarding (accessible to everyone for family use)
+  location /vpn {
+    # Apply rate limiting
+    limit_req zone=vpn_onboarding burst=3 nodelay;
+    
+    # Security headers for web page
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Proxy to CrookedKeys onboarding page
+    proxy_pass http://127.0.0.1:{{ crooked_keys_port | default('3001') }}/api/crooked-keys/;
+  }
+
+  # CrookedKeys API endpoints
+  location /api/crooked-keys/ {
+    # Apply rate limiting
+    limit_req zone=crooked_keys_api burst=5 nodelay;
+    
+    # Security headers for API
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Proxy all CrookedKeys API requests
+    proxy_pass http://127.0.0.1:{{ crooked_keys_port | default('3001') }};
+    
+    # Admin endpoints require trusted network access
+    location /api/crooked-keys/clients {
+      if ($is_home = 0) {
+        return 403 '{"error":"Admin access requires VPN or LAN connection"}';
+      }
+      proxy_pass http://127.0.0.1:{{ crooked_keys_port | default('3001') }};
+    }
   }
 }

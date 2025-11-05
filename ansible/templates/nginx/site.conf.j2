@@ -1,15 +1,37 @@
 # /etc/nginx/conf.d/default.conf — managed by Ansible
 
-# Classify client IPs: 1 = trusted (LAN/VPN), 0 = everyone else
-geo $is_home {
+# Rate limiting for CrookedKeys
+limit_req_zone $binary_remote_addr zone=vpn_onboarding:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=crooked_keys_api:10m rate=10r/m;
+
+# Network classification
+# - $is_lan: 1 if client is in LAN CIDRs
+# - $is_vpn: 1 if client is in WireGuard CIDRs
+# - $is_home: 1 if either LAN or VPN (back-compat for existing routing)
+geo $is_lan {
   default 0;
-  127.0.0.1/32 1;
 {% for c in nginx_lan_cidrs %}
   {{ c }} 1;
 {% endfor %}
+}
+
+geo $is_vpn {
+  default 0;
 {% for c in nginx_wg_cidrs %}
   {{ c }} 1;
 {% endfor %}
+}
+
+map "$is_lan:$is_vpn" $client_network {
+  default   internet;
+  1:0       lan;
+  0:1       vpn;
+  1:1       vpn;   # if matches both, prefer vpn label
+}
+
+map "$is_lan$is_vpn" $is_home {
+  default 0;
+  ~1      1;   # any non-zero combination means home
 }
 
 map $is_home $upstream_or_info {
@@ -17,15 +39,23 @@ map $is_home $upstream_or_info {
   0      "info";
 }
 
-# Upstream points at Frigate container
+{% if ha_token_long is defined %}
+# Home Assistant authorization header - use client's header if present, otherwise fallback to LLAT
+map $http_authorization $ha_auth_header {
+  default "Bearer {{ ha_token_long }}";
+  "~^.+" $http_authorization;
+}
+{% endif %}
+
+# Upstream points at Frigate on localhost
 upstream frigate_upstream {
-  server frigate:5000;
+  server {{ nginx_frigate_upstream | regex_replace('^http://','') }};
   keepalive 32;
 }
 
 server {
   listen {{ nginx_listen_http_port }} default_server;
-  server_name {{ nginx_cf_record }}.{{ nginx_cf_zone }} _;
+  server_name {{ nginx_ddns_fqdn }} _;
   sendfile on;
 
   # Basic hardening
@@ -37,26 +67,200 @@ server {
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 300s;
 
-  # CORS headers for browser access (trusted users only)
-  add_header Access-Control-Allow-Origin * always;
-  add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-  add_header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With" always;
-  add_header Access-Control-Max-Age 3600 always;
+  # Expose simple headers for client awareness/debugging
+  add_header X-Client-Network $client_network always;
+  add_header X-Client-IP $remote_addr always;
 
-  # If trusted → proxy to Frigate; else → info site
-  location / {
-    # Handle CORS preflight requests
+  # Network classification endpoint (LAN/VPN detection)
+  location = /whoami {
+    # Handle CORS preflight
     if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+      add_header Content-Length 0;
+      add_header Content-Type "text/plain";
       return 204;
     }
     
-    if ($upstream_or_info = upstream) {
-      proxy_pass http://frigate_upstream;
-      break;
+    # CORS for actual requests
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    
+    default_type application/json;
+    return 200 '{"network":"$client_network","ip":"$remote_addr"}';
+  }
+
+  # Frigate API (LAN/VPN only)
+  location /frigate/ {
+    if ($upstream_or_info != upstream) {
+      return 403;
     }
+    
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 3600;
+      return 204;
+    }
+    
+    # CORS for actual requests
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    # WebSocket upgrade for Frigate event streams (/ws)
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_pass http://frigate_upstream/;
+  }
+
+  # Root serves info site for everyone
+  location / {
     root {{ nginx_info_root }};
     index index.html;
     try_files /index.html =404;
+  }
+
+  # Home Assistant proxy (LAN/VPN only)
+  # Note: HA runs with network_mode: host, so it's on the Pi's loopback at :8123.
+  # Since this nginx runs in a Docker container, use Pi's IP address.
+  location /homeassistant/ {
+    if ($upstream_or_info != upstream) {
+      return 403;
+    }
+    
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 86400;
+      return 204;
+    }
+    
+    # CORS for actual requests (also on 401/4xx with 'always')
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    
+    proxy_pass http://{{ ansible_default_ipv4.address }}:8123/;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+{% if ha_token_long is defined %}
+    # Use client's Authorization header when provided; else fall back to LLAT
+    proxy_set_header Authorization $ha_auth_header;
+{% endif %}
+  }
+
+  # Climate/Thermostat API - proxy to Home Assistant (LAN/VPN only)
+  location /climate/ {
+    if ($upstream_or_info != upstream) {
+      return 403;
+    }
+    
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 86400;
+      return 204;
+    }
+    
+    # CORS for actual requests (also on 401/4xx with 'always')
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    
+    proxy_pass http://{{ ansible_default_ipv4.address }}:8123/;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+{% if ha_token_long is defined %}
+    # Use client's Authorization header when provided; else fall back to LLAT
+    proxy_set_header Authorization $ha_auth_header;
+{% endif %}
+  }
+
+  # CrookedKeys API Integration - Uses existing $is_home access control!
+  location /api/crooked-keys/ {
+    # Only allow LAN and VPN access (uses your existing access control)
+    if ($is_home = 0) {
+      add_header Content-Type "application/json" always;
+      return 403 '{"error":"CrookedKeys access requires VPN connection","vpn_setup":"https://{{ nginx_cf_record }}.{{ nginx_cf_zone }}/household.conf"}';
+    }
+    
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 3600;
+      return 204;
+    }
+    
+    # CORS for actual requests
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Access-Control-Allow-Credentials "true" always;
+    add_header X-Access-Level "trusted" always;
+    
+    # Proxy to CrookedKeys API on host system (port 3001)
+    proxy_pass http://localhost:3001;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Client-Network $client_network;
+    proxy_read_timeout 30s;
+    proxy_connect_timeout 10s;
+  }
+
+  # CrookedKeys Health Check - Public endpoint for monitoring
+  location /api/crooked-keys/health {
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Content-Type" always;
+      add_header Content-Length 0;
+      return 204;
+    }
+    
+    # CORS for actual requests
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    
+    # Public health check endpoint (no access restriction)
+    proxy_pass http://localhost:3001;
+    access_log off;  # Reduce log noise from health checks
+  }
+
+  # CrookedKeys VPN Onboarding Page - Public endpoint for family VPN setup
+  location /vpn {
+    # Handle CORS preflight
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Content-Type" always;
+      add_header Content-Length 0;
+      return 204;
+    }
+    
+    # CORS for actual requests
+    add_header Access-Control-Allow-Origin "$http_origin" always;
+    add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    
+    # Proxy to CrookedKeys onboarding page
+    proxy_pass http://localhost:3001/api/crooked-keys/;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Host $host;
   }
 
   # Household WireGuard key for VPN users

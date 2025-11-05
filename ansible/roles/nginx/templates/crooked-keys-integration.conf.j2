@@ -1,0 +1,136 @@
+# CrookedKeys Integration - Enhanced Security Layer
+# /etc/nginx/conf.d/crooked-keys-integration.conf
+
+# Rate limiting for API endpoints
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=key_exchange:10m rate=5r/m;
+
+# Enhanced network classification for CrookedKeys
+map "$is_lan:$is_vpn" $access_level {
+  default   "public";     # Internet access
+  1:0       "trusted";    # LAN access  
+  0:1       "secure";     # VPN access
+  1:1       "admin";      # Both LAN + VPN (admin level)
+}
+
+# Security headers map
+map $access_level $security_headers {
+  public   "public";
+  trusted  "trusted";
+  secure   "secure"; 
+  admin    "admin";
+}
+
+# CrookedKeys API endpoints
+server {
+  listen {{ nginx_listen_http_port }};
+  server_name {{ nginx_ddns_fqdn }};
+  
+  # CrookedKeys onboarding page (family-friendly entry point)
+  location /vpn {
+    # Apply rate limiting
+    limit_req zone=api_limit burst=5 nodelay;
+    
+    # Log onboarding access
+    access_log /var/log/nginx/crooked-keys-access.log combined;
+    
+    # Security headers for web page
+    add_header X-CrookedKeys-Version "1.0" always;
+    add_header X-Access-Level $access_level always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    
+    # Proxy to CrookedKeys onboarding page
+    proxy_pass http://127.0.0.1:{{ crooked_keys_port }}/api/crooked-keys/;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Host $host;
+  }
+
+  # CrookedKeys API endpoints
+  location /api/crooked-keys/ {
+    # Apply rate limiting for API calls
+    limit_req zone=key_exchange burst=3 nodelay;
+    
+    # Log all API requests
+    access_log /var/log/nginx/crooked-keys-access.log combined;
+    error_log /var/log/nginx/crooked-keys-error.log warn;
+    
+    # Security headers for API
+    add_header X-CrookedKeys-Version "1.0" always;
+    add_header X-Access-Level $access_level always;
+    add_header X-Content-Type-Options "nosniff" always;
+    
+    # Proxy all CrookedKeys API requests
+    proxy_pass http://127.0.0.1:{{ crooked_keys_port }};
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Access-Level $access_level;
+    proxy_set_header Host $host;
+  }
+  
+  # Enhanced Frigate protection with CrookedKeys integration
+  location /frigate/ {
+    # Log access attempts
+    access_log /var/log/nginx/frigate-access.log combined;
+    
+    # Block internet access with helpful error
+    if ($is_home = 0) {
+      add_header Content-Type "application/json" always;
+      return 403 '{"error":"Frigate access requires VPN connection","vpn_setup":"https://{{ nginx_ddns_fqdn }}/api/crooked-keys/vpn-config"}';
+    }
+    
+    # Apply API rate limiting even for trusted users
+    limit_req zone=api_limit burst=20 nodelay;
+    
+    # Add security context headers
+    add_header X-Access-Level $access_level always;
+    add_header X-Protected-Service "frigate" always;
+    
+    proxy_pass http://frigate_upstream;
+    
+    # Enhanced proxy headers for Frigate
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Access-Level $access_level;
+    proxy_buffering off;
+  }
+  
+  # Enhanced Home Assistant protection
+  location /homeassistant/ {
+    access_log /var/log/nginx/homeassistant-access.log combined;
+    
+    if ($is_home = 0) {
+      add_header Content-Type "application/json" always;
+      return 403 '{"error":"Home Assistant requires VPN connection","vpn_setup":"https://{{ nginx_ddns_fqdn }}/api/crooked-keys/vpn-config"}';
+    }
+    
+    limit_req zone=api_limit burst=30 nodelay;
+    
+    add_header X-Access-Level $access_level always;
+    add_header X-Protected-Service "homeassistant" always;
+    
+    proxy_pass http://127.0.0.1:8123/;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Access-Level $access_level;
+    
+    # Enhanced CORS for dashboard integration
+    set $cors "";
+    if ($http_origin ~* "^https?://(localhost(:[0-9]+)?|127\.0\.0\.1(:[0-9]+)?|0\.0\.0\.0(:[0-9]+)?|crooked-services-dashboard|crooked-services\.local|10\.8\.0\.[0-9]+)") {
+      set $cors "true";
+    }
+    
+    if ($cors = "true") {
+      add_header Access-Control-Allow-Origin "$http_origin" always;
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With, X-Access-Level" always;
+      add_header Access-Control-Allow-Credentials "true" always;
+    }
+    
+    if ($request_method = OPTIONS) {
+      add_header Content-Length 0;
+      add_header Access-Control-Max-Age 86400;
+      return 204;
+    }
+  }
+}

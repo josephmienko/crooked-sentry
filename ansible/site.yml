@@ -11,4 +11,7 @@
     - role: docker       # (if you install docker via role)
     - role: nginx
     - role: wireguard
+    - role: crooked-keys # CrookedKeys integration
+      tags: crooked-keys
     - role: frigate
+    - role: homeassistant
