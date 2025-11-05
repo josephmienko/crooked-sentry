@@ -1,0 +1,100 @@
+---
+- name: Create Home Assistant config directory
+  file:
+    path: "{{ homeassistant_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy Home Assistant configuration
+  template:
+    src: configuration.yaml.j2
+    dest: "{{ homeassistant_config_dir }}/configuration.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart homeassistant
+
+# --- Optional: HACS (Home Assistant Community Store) ---
+- name: Ensure custom_components directory exists
+  file:
+    path: "{{ homeassistant_config_dir }}/custom_components"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: enable_hacs | default(true)
+
+- name: Download HACS release
+  get_url:
+    url: https://github.com/hacs/integration/releases/latest/download/hacs.zip
+    dest: /tmp/hacs.zip
+    mode: '0644'
+  when: enable_hacs | default(true)
+
+- name: Install/Update HACS into custom_components
+  unarchive:
+    src: /tmp/hacs.zip
+    dest: "{{ homeassistant_config_dir }}/custom_components/"
+    remote_src: true
+    creates: "{{ homeassistant_config_dir }}/custom_components/hacs/manifest.json"
+  when: enable_hacs | default(true)
+  notify: restart homeassistant
+
+- name: Deploy Home Assistant secrets
+  template:
+    src: secrets.yaml.j2
+    dest: "{{ homeassistant_config_dir }}/secrets.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart homeassistant
+
+- name: Deploy automations file
+  template:
+    src: automations.yaml.j2
+    dest: "{{ homeassistant_config_dir }}/automations.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart homeassistant
+
+- name: Deploy scripts file
+  template:
+    src: scripts.yaml.j2
+    dest: "{{ homeassistant_config_dir }}/scripts.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart homeassistant
+
+- name: Deploy scenes file
+  template:
+    src: scenes.yaml.j2
+    dest: "{{ homeassistant_config_dir }}/scenes.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart homeassistant
+
+
+
+- name: Ensure Home Assistant is in docker-compose
+  blockinfile:
+    path: /home/{{ ansible_user }}/docker-compose.yml
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - homeassistant"
+    block: |2
+        homeassistant:
+          image: ghcr.io/home-assistant/home-assistant:{{ homeassistant_version }}
+          container_name: {{ homeassistant_container_name }}
+          restart: unless-stopped
+          network_mode: host
+          volumes:
+            - {{ homeassistant_config_dir }}:/config:rw
+            - /etc/localtime:/etc/localtime:ro
+          environment:
+            - TZ=${TZ}
+          privileged: true
+    create: yes
+  notify: restart homeassistant

@@ -1,0 +1,76 @@
+# Home Assistant Configuration
+homeassistant:
+  name: Crooked Sentry
+  latitude: !secret home_latitude
+  longitude: !secret home_longitude
+  elevation: 0
+  unit_system: imperial
+  time_zone: America/Los_Angeles
+  external_url: !secret external_url
+  internal_url: http://{{ ansible_default_ipv4.address }}:8123
+
+# Enable the frontend
+frontend:
+  themes: !include_dir_merge_named themes
+
+# Enable configuration UI
+config:
+
+# Enable HTTP API
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.18.0.0/16  # Docker network
+    - 127.0.0.1
+  server_port: 8123
+  cors_allowed_origins:
+    - https://{{ app_fqdn }}
+    - http://{{ app_fqdn }}
+    - http://{{ ansible_default_ipv4.address }}:8123
+    - http://{{ ansible_default_ipv4.address }}
+
+# Enable history
+history:
+
+# Enable logbook
+logbook:
+
+# Enable the recorder (database)
+recorder:
+  db_url: sqlite:////config/home-assistant_v2.db
+  purge_keep_days: 30
+
+# Enable automations
+automation: !include automations.yaml
+
+# Enable scripts
+script: !include scripts.yaml
+
+# Enable scenes
+scene: !include scenes.yaml
+
+# Frigate integration
+# Note: Frigate is configured via the Home Assistant UI (config flow only).
+# Add it in Settings → Devices & Services → Add Integration → "Frigate"
+# Recommended URL (goes through local nginx reverse proxy):
+#   http://127.0.0.1/frigate
+# or
+#   http://{{ ansible_default_ipv4.address }}/frigate
+
+# Roku integration is configured via the UI (config flow).
+# Add in Home Assistant: Settings → Devices & Services → Add Integration → Roku
+
+# Text-to-speech
+tts:
+  - platform: google_translate
+
+# Enable system health
+system_health:
+
+# Discovery services (recommended for device auto-discovery)
+zeroconf:
+ssdp:
+
+# Enable logger
+logger:
+  default: info

@@ -1,0 +1,8 @@
+---
+- name: Restart Home Assistant container
+  listen: restart homeassistant
+  ansible.builtin.command:
+    cmd: docker compose restart homeassistant
+    chdir: /home/{{ ansible_user }}
+  when: ansible_connection != 'local'
+  become: true

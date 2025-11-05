@@ -1,0 +1,15 @@
+---
+# Home Assistant deployment configuration
+homeassistant_version: "2024.11"
+homeassistant_container_name: "homeassistant"
+homeassistant_config_dir: "/opt/homeassistant/config"
+homeassistant_port: 8123
+
+# Roku integration
+roku_enabled: true
+# Prefer an explicit var or environment override; fall back to the legacy vault var if present
+roku_host: "{{ lookup('env', 'ROKU_IP') | default(roku_ip | default(''), true) }}"
+roku_name: "Living Room Roku"
+
+# Optional: install HACS (Home Assistant Community Store) to manage custom integrations
+enable_hacs: true
